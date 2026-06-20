@@ -2,10 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AutoComplete, Input } from "antd";
 import {
   connectToServer,
+  callTool,
   type ServerInfo,
   type ToolCallInfo,
+  type ModelContext,
 } from "./mcp/host-bridge";
-import { buildMcpTools, runTurn, type ChatMsg } from "./agent/runner";
+import {
+  buildMcpTools,
+  runTurn,
+  resumeTurn,
+  displayItemsFromState,
+  pendingHitlCall,
+  type DisplayItem,
+} from "./agent/runner";
+import { isFormSubmit, validateResult, type FormSpec } from "@omni/forms-dsl";
 import { ModelPicker } from "./components/ModelPicker";
 import { AppPane } from "./components/AppPane";
 import { getApiKey, saveApiKey, deleteApiKey, keyringAvailable } from "./lib/secrets";
@@ -17,7 +27,9 @@ import {
   createConversation,
   listConversations,
   getMessages,
-  addMessage,
+  getConversationState,
+  conversationStateAccessor,
+  logFormEvent,
   touchConversation,
   deleteConversation,
   type ConversationRow,
@@ -79,7 +91,7 @@ export default function App() {
     }
   }, [apiKey]);
 
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [messages, setMessages] = useState<DisplayItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -87,8 +99,42 @@ export default function App() {
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  const [activation, setActivation] = useState<ToolCallInfo | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // The latest server, readable from stable callbacks without re-binding them.
+  const serverRef = useRef<ServerInfo | null>(null);
+  useEffect(() => {
+    serverRef.current = server;
+  }, [server]);
+
   const refreshConversations = useCallback(async () => {
     setConversations(await listConversations());
+  }, []);
+
+  /**
+   * Reflect a conversation's persisted SDK state into the UI: render the full
+   * transcript (text bubbles + tool cards) and, if the conversation is paused
+   * awaiting form input, re-mount the panel for the pending call so the user
+   * can still submit — even after a reload.
+   */
+  const hydrate = useCallback(async (id: number) => {
+    const state = await getConversationState(id);
+    if (state) {
+      setMessages(displayItemsFromState(state));
+      const pending = pendingHitlCall(state);
+      const srv = serverRef.current;
+      if (pending && srv?.tools.has(pending.name)) {
+        const info = callTool(srv, pending.name, pending.args);
+        setActivation(info);
+      } else {
+        setActivation(null);
+      }
+      return;
+    }
+    // Legacy text-only conversations (pre SDK-state migration).
+    const rows = await getMessages(id);
+    setMessages(rows.map((r) => ({ kind: "msg", role: r.role as "user" | "assistant", content: r.content })));
+    setActivation(null);
   }, []);
 
   // Restore the most recent conversation on mount.
@@ -97,27 +143,28 @@ export default function App() {
       const convs = await listConversations();
       setConversations(convs);
       if (convs.length > 0) {
-        const latest = convs[0];
-        setConversationId(latest.id);
-        const rows = await getMessages(latest.id);
-        setMessages(rows.map((r) => ({ role: r.role as ChatMsg["role"], content: r.content })));
+        setConversationId(convs[0].id);
+        await hydrate(convs[0].id);
       }
     })();
-  }, []);
+  }, [hydrate]);
 
   const newChat = useCallback(() => {
     setConversationId(null);
     setMessages([]);
+    setActivation(null);
     setConnError(null);
     setHistoryOpen(false);
   }, []);
 
-  const switchConversation = useCallback(async (id: number) => {
-    setConversationId(id);
-    const rows = await getMessages(id);
-    setMessages(rows.map((r) => ({ role: r.role as ChatMsg["role"], content: r.content })));
-    setHistoryOpen(false);
-  }, []);
+  const switchConversation = useCallback(
+    async (id: number) => {
+      setConversationId(id);
+      await hydrate(id);
+      setHistoryOpen(false);
+    },
+    [hydrate],
+  );
 
   const removeConversation = useCallback(
     async (id: number) => {
@@ -125,14 +172,12 @@ export default function App() {
       if (id === conversationId) {
         setConversationId(null);
         setMessages([]);
+        setActivation(null);
       }
       await refreshConversations();
     },
     [conversationId, refreshConversations],
   );
-
-  const [activation, setActivation] = useState<ToolCallInfo | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const connect = useCallback(async () => {
     const url = serverUrl.trim();
@@ -145,7 +190,6 @@ export default function App() {
     try {
       const info = await connectToServer(new URL(url));
       setServer(info);
-      // Persist the connection for next launch.
       void setSetting("server_url", url);
       void upsertMcpServer(url, info.name);
       setServerOptions((opts) =>
@@ -162,7 +206,9 @@ export default function App() {
     setMessages((msgs) => {
       const next = msgs.slice();
       const last = next[next.length - 1];
-      if (last?.role === "assistant") next[next.length - 1] = { ...last, content: last.content + delta };
+      if (last?.kind === "msg" && last.role === "assistant") {
+        next[next.length - 1] = { ...last, content: last.content + delta };
+      }
       return next;
     });
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -175,41 +221,110 @@ export default function App() {
     if (!model) return setConnError("Pick a model first.");
     setConnError(null);
 
-    // Ensure a conversation exists (title from the first user message).
     let convId = conversationId;
     if (convId == null) {
       convId = await createConversation(text.slice(0, 60));
       setConversationId(convId);
     }
 
-    const userMsg: ChatMsg = { role: "user", content: text };
-    const history = [...messages, userMsg];
-    setMessages([...history, { role: "assistant", content: "" }]);
+    setMessages((m) => [
+      ...m,
+      { kind: "msg", role: "user", content: text },
+      { kind: "msg", role: "assistant", content: "" },
+    ]);
     setInput("");
     setBusy(true);
-    await addMessage(convId, "user", text);
 
-    // Tools are rebuilt per turn; onAutoSummon slides the pane out.
     const tools = server ? buildMcpTools(server, setActivation) : [];
+    const state = conversationStateAccessor(convId);
 
     try {
-      const full = await runTurn({ apiKey, model, messages: history, tools, onTextDelta: appendDeltaToLastAssistant });
-      await addMessage(convId, "assistant", full);
+      await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant });
+      // Reconcile the transcript with persisted state (surfaces tool cards). The
+      // panel, if a form paused, was already opened by onAutoSummon mid-turn.
+      setMessages(displayItemsFromState(await getConversationState(convId)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setMessages((m) => {
         const next = m.slice();
         const last = next[next.length - 1];
-        if (last?.role === "assistant" && !last.content) next[next.length - 1] = { ...last, content: `⚠️ ${msg}` };
+        if (last?.kind === "msg" && last.role === "assistant" && !last.content) {
+          next[next.length - 1] = { ...last, content: `⚠️ ${msg}` };
+        }
         return next;
       });
-      await addMessage(convId, "assistant", `⚠️ ${msg}`);
     } finally {
       setBusy(false);
       await touchConversation(convId);
       void refreshConversations();
     }
-  }, [input, busy, apiKey, model, messages, server, conversationId, appendDeltaToLastAssistant, refreshConversations]);
+  }, [input, busy, apiKey, model, server, conversationId, appendDeltaToLastAssistant, hydrate, refreshConversations]);
+
+  /**
+   * The form app pushes the user's submission here (via `updateModelContext`).
+   * We validate it host-side (the iframe is untrusted), resolve the paused HITL
+   * call with the cleaned values, and let the SDK resume the conversation.
+   */
+  const onAppContext = useCallback(
+    async (ctx: ModelContext | null) => {
+      const sc = ctx?.structuredContent;
+      if (!isFormSubmit(sc) || busy) return;
+      const convId = conversationId;
+      if (convId == null) return;
+
+      const state = await getConversationState(convId);
+      const pending = pendingHitlCall(state);
+      if (!pending) return;
+
+      const spec = pending.args as unknown as FormSpec;
+      const check = validateResult(spec, sc.values);
+      const output = check.ok ? check.cleaned : { error: "invalid_result", issues: check.issues };
+
+      void logFormEvent({
+        conversationId: convId,
+        toolName: pending.name,
+        spec,
+        specValid: true,
+        issues: check.ok ? undefined : check.issues,
+        result: sc.values,
+        status: "submitted",
+      });
+
+      setActivation(null);
+      setBusy(true);
+      setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
+
+      const accessor = conversationStateAccessor(convId);
+      const tools = server ? buildMcpTools(server, setActivation) : [];
+      try {
+        await resumeTurn({
+          apiKey,
+          model,
+          callId: pending.callId,
+          output,
+          state: accessor,
+          tools,
+          onTextDelta: appendDeltaToLastAssistant,
+        });
+        setMessages(displayItemsFromState(await getConversationState(convId)));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setMessages((m) => {
+          const next = m.slice();
+          const last = next[next.length - 1];
+          if (last?.kind === "msg" && last.role === "assistant" && !last.content) {
+            next[next.length - 1] = { ...last, content: `⚠️ ${msg}` };
+          }
+          return next;
+        });
+      } finally {
+        setBusy(false);
+        await touchConversation(convId);
+        void refreshConversations();
+      }
+    },
+    [busy, conversationId, server, apiKey, model, appendDeltaToLastAssistant, hydrate, refreshConversations],
+  );
 
   const toolCount = server ? server.tools.size : 0;
 
@@ -284,11 +399,23 @@ export default function App() {
               automatically.
             </p>
           )}
-          {messages.map((m, i) => (
-            <div key={i} className={`bubble ${m.role}`}>
-              {m.content || (busy && i === messages.length - 1 ? "…" : "")}
-            </div>
-          ))}
+          {messages.map((m, i) =>
+            m.kind === "tool" ? (
+              <div key={i} className={`tool-card ${m.status}`}>
+                <span className="tool-card-icon">🔧</span>
+                <span className="tool-card-name">{m.name}</span>
+                <span className="tool-card-status">
+                  {m.status === "pending" && "· awaiting input"}
+                  {m.status === "done" && "· done"}
+                  {m.status === "error" && "· error"}
+                </span>
+              </div>
+            ) : (
+              <div key={i} className={`bubble ${m.role}`}>
+                {m.content || (busy && i === messages.length - 1 ? "…" : "")}
+              </div>
+            ),
+          )}
         </section>
 
         <section className="composer">
@@ -310,7 +437,11 @@ export default function App() {
         </section>
       </main>
 
-      <AppPane activation={activation} onClose={() => setActivation(null)} />
+      <AppPane
+        activation={activation}
+        onClose={() => setActivation(null)}
+        onContextUpdate={onAppContext}
+      />
 
       <HistoryDrawer
         open={historyOpen}

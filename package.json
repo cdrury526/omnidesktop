@@ -16,6 +16,7 @@
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
     "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@omni/forms-dsl": "workspace:*",
     "@openrouter/agent": "^0.7.2",
     "@openrouter/sdk": "0.13.7",
     "@tauri-apps/api": "^2",

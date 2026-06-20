@@ -70,7 +70,23 @@ async fn migrate(conn: &Connection) -> Result<(), libsql::Error> {
             content         TEXT NOT NULL,
             created_at      TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, id);",
+        CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, id);
+        CREATE TABLE IF NOT EXISTS conversation_state (
+            conversation_id INTEGER PRIMARY KEY,
+            state           TEXT NOT NULL,
+            updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS form_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER,
+            tool_name       TEXT,
+            spec            TEXT,
+            spec_valid      INTEGER,
+            issues          TEXT,
+            result          TEXT,
+            status          TEXT NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );",
     )
     .await?;
     Ok(())
