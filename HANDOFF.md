@@ -26,6 +26,10 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 - A demo MCP App server: clone `modelcontextprotocol/ext-apps`, then
   `cd examples/basic-server-react && bun install && bun run build && PORT=3001 bun main.ts`
   (serves `http://localhost:3001/mcp`).
+- The interactive-forms server (in-repo): `cd servers/forms &&
+  INPUT=mcp-app.html pnpm exec vite build && PORT=3002 bun main.ts` (serves
+  `http://localhost:3002/mcp`). It's a pnpm workspace package alongside
+  `packages/forms-dsl`; run `pnpm install` from the root after pulling.
 
 ## Where everything is
 
@@ -55,8 +59,8 @@ DB file at runtime: `~/.local/share/com.drury.omni-desktop/omni.db`
 ## Conventions / rules
 
 - **No source file over 600 lines.** If a file approaches it, split by concern.
-  Current largest: `host-bridge.ts` (352), `App.tsx` (326) — watch these; if
-  `App.tsx` grows, extract hooks (e.g. `useConversations`, `useAgentChat`).
+  Current largest: `App.tsx` (457 — extract `useAgentChat` soon),
+  `host-bridge.ts` (352), `runner.ts` (298).
 - **Match surrounding style.** Comment density, naming, and idiom already vary
   by file — follow the file you're in.
 - **Secrets never cross into the webview.** API key → keyring (Rust); DB and any
@@ -95,39 +99,103 @@ DB file at runtime: `~/.local/share/com.drury.omni-desktop/omni.db`
   proxy must be run as a Tauri sidecar (or equivalent) on a separate origin.
   Currently dev-only.
 
-## NEXT TASK — evaluate conversation continuity vs. SDK leverage
+## DONE — conversation continuity now uses the SDK StateAccessor
 
-The user wants to know whether our "continue a past conversation" approach
-**fully leverages the OpenRouter agent SDK**. Honest current state:
+The earlier gap (text-only replay) is **fixed**. Continuity no longer rebuilds
+`input` from `{role, content}` text via `fromChatMessages`; it uses the SDK's
+own `StateAccessor` / `ConversationState` so tool calls and tool results persist
+and replay too.
 
-- We persist only `{role, content}` *text* per turn (`messages` table). On send,
-  `runTurn` rebuilds `input` from that text via `fromChatMessages(history)` and
-  spins up a **fresh `OpenRouter` instance each turn**. We do **not** use the
-  SDK's `state`/`StateAccessor` (`createInitialState`/`updateState`/
-  `conversation-state` helpers), and we do **not** persist tool calls or tool
-  results.
+What changed:
+- New `conversation_state` table (one JSON blob per chat) — `src-tauri/src/db.rs`.
+- `getConversationState` / `saveConversationState` / `conversationStateAccessor`
+  (a DB-backed `{ load, save }` StateAccessor) — `src/lib/db.ts`.
+- `runTurn` now takes `{ userText, state }` instead of the full `messages`
+  array. It passes **only the new user message** as `input` plus the `state`
+  accessor; the SDK rehydrates prior history (incl. `function_call` /
+  `function_call_output` items + `previousResponseId` for server-side chaining)
+  and auto-saves response output + tool results after every turn —
+  `src/agent/runner.ts`. Also adds `chatMsgsFromState()` to derive display
+  bubbles from persisted state.
+- `App.tsx` loads display from SDK state (`loadMessages`, with a fallback to the
+  legacy `messages` text rows for pre-migration chats) and no longer writes the
+  per-message text table.
 
-Likely gap: continuity is *text-only replay*. The SDK is built around the
-Responses-API item stream (incl. `function_call` / `function_call_output`
-items) and a `StateAccessor` for stateful multi-turn. So when resuming a chat,
-the model sees prior **answers** but not the prior **tool interactions** (which
-tool ran, with what args, and the exact result) — it can't reference exact tool
-outputs or know it already did something.
+Net effect: resuming a chat, the model sees the exact prior tool interactions —
+which tool ran, with what args, and the precise output — not just prior answers.
 
-Things to investigate / decide:
-1. Should we persist full message items (`toChatMessage`/raw `OpenResponsesResult`
-   output incl. tool calls/results), not just assistant text?
-2. Should we adopt the SDK `StateAccessor` pattern with a DB-backed persistence
-   adapter, instead of reconstructing `input` each turn?
-3. Is per-turn `new OpenRouter()` fine, or should the client/state be retained?
-4. What's the right schema for richer history (a `role`+`content` text table is
-   lossy for tool turns)?
+Verification done: `tsc --noEmit`, `vite build`, `cargo build` all green.
+**Not yet run live** — the worthwhile manual check is multi-turn tool
+persistence: call a tool, reload/switch away and back, confirm a follow-up that
+references the earlier tool output works. The legacy `messages` table + its
+`getMessages` reader are intentionally kept (read-only) so old conversations
+still render; they can be dropped once no pre-migration chats matter.
 
 Relevant SDK exports (see `node_modules/@openrouter/agent/esm/index.d.ts`):
-`createInitialState`, `updateState`, `appendToMessages`, `StateAccessor`,
-`ConversationState`, `toChatMessage`, `fromChatMessages`, `ModelResult.getState()`.
+`StateAccessor`, `ConversationState`, `createInitialState`, `updateState`,
+`appendToMessages`, `ModelResult.getState()`.
+
+## DONE — interactive forms via durable HITL (the big one)
+
+The agent can now render a real form, the user fills it, and the answers come
+back as the tool's result — and the pause **survives a reload** (it's persisted
+SDK state). Built as three layers:
+
+1. **`packages/forms-dsl`** — the form language, the single source of truth.
+   Discriminated field union (`fields.ts`: text/textarea/email/url/secret/
+   number/slider/select/radio/multiselect/boolean/date/time/datetime/info),
+   conditional visibility (`condition.ts`, `when`), normalize, validators
+   (`validate.ts`: `validateSpec` agent→form with typo hints, `validateResult`
+   form→agent honoring `when`), and the agent-facing **Zod** schema
+   (`schema.ts`) that becomes the tool's `inputSchema`. `protocol.ts` holds the
+   shared markers. Adding a field type = edit the union + one renderer case.
+2. **`servers/forms`** — a generic MCP App server (cloned from
+   `basic-server-react`'s build pipeline). One tool, `request_user_input`, whose
+   `inputSchema` IS the DSL. Ships a native-input renderer (`FieldRenderer.tsx`),
+   live `when`, local multi-step nav, host theming (`useHostStyles`). On submit
+   it calls `updateModelContext({ structuredContent: { "omni.form/submit": true,
+   values } })`. Run: `cd servers/forms && INPUT=mcp-app.html pnpm exec vite
+   build && PORT=3002 bun main.ts`.
+3. **Host HITL wiring** — `runner.ts`: tools flagged `_meta[INTERACTIVE_TOOL_META]`
+   become SDK **HITL tools** — `onToolCalled` validates the spec (bad → returns
+   issues so the model self-corrects; good → renders panel + returns `null` to
+   PAUSE, `status: awaiting_hitl`). `resumeTurn()` resolves a paused call via a
+   `function_call_output` item (the SDK's documented resume — see the OpenRouter
+   HITL cookbook). `displayItemsFromState()` now yields tool **cards** alongside
+   bubbles. `App.tsx`: catches the submit-marked `updateModelContext`,
+   re-validates host-side (untrusted iframe), `resumeTurn`s; on load/switch it
+   detects `awaiting_hitl` and **re-mounts the panel for the pending call**.
+   `form_events` table + `logFormEvent()` log every interaction (spec, validity,
+   issues, result) — the dataset for "what are agents tripping on."
+
+Key decisions (locked with the user): custom compact DSL (not JSON Schema);
+`updateModelContext` as the submit channel (our host makes it active);
+`when` in v1; multi-step nav is App-local (one agent call, one result); chat
+shows cards (inline-panel embedding is still TODO — currently the side pane).
+
+Verification: full stack builds green (`tsc --noEmit`, `vite build`, `cargo
+build`, both package typechecks, forms bundle, and the forms server serves the
+correct tool schema over MCP). **Not yet run live end-to-end** — the test is:
+connect BOTH servers (3001 get-time, 3002 forms), ask the agent to "collect my
+shipping details" (or anything needing structured input), fill the form, confirm
+the agent continues with the values; then reload mid-form and confirm the panel
+re-appears and still submits.
+
+Follow-ups are tracked in the Backlog below.
 
 ## Backlog
 
-Turso sync · production sandbox sidecar · MCP server manager UI · conversation
-rename · multiple concurrent app panes · code-split the 1MB+ JS bundle.
+From the interactive-forms work:
+- **Form-cancel path (correctness gap).** Closing the pane on a pending form
+  leaves the HITL call dangling in `awaiting_hitl` forever — the conversation
+  can't proceed. Closing (or an explicit "Cancel") should resolve the call as
+  cancelled (`resumeTurn` with an `{ cancelled: true }` / rejected output) and
+  log a `cancelled` `form_events` row.
+- Inline-panel embedding in the transcript (cards currently link to the side
+  pane; the chosen UX is the rendered app inline per card).
+- Extract a `useAgentChat` hook from `App.tsx` (457 lines) before it hits the
+  600-line cap.
+
+Other:
+- Turso sync · production sandbox sidecar · MCP server manager UI · conversation
+  rename · multiple concurrent app panes · code-split the 1MB+ JS bundle.

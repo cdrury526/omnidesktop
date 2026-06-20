@@ -91,6 +91,11 @@ export async function listConversations(): Promise<ConversationRow[]> {
   );
 }
 
+/**
+ * Legacy text history reader. Conversations created before the SDK-state
+ * migration stored only `{role, content}` text rows; we still read them so old
+ * chats render. New turns persist full SDK state via {@link conversationStateAccessor}.
+ */
 export async function getMessages(conversationId: number): Promise<StoredMessage[]> {
   return dbSelect<StoredMessage>(
     "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id",
@@ -98,14 +103,68 @@ export async function getMessages(conversationId: number): Promise<StoredMessage
   );
 }
 
-export async function addMessage(
-  conversationId: number,
-  role: string,
-  content: string,
-): Promise<void> {
+// ---- SDK conversation state (full item history incl. tool calls/results) ----
+//
+// The OpenRouter agent SDK owns a `ConversationState` per chat: the complete
+// item stream (user/assistant messages, function_call + function_call_output
+// items) plus `previousResponseId` for server-side chaining. We persist it as
+// one JSON blob and hand the SDK a StateAccessor so it rehydrates history and
+// auto-saves after every turn — see `runner.ts`.
+
+export async function getConversationState(id: number): Promise<unknown | null> {
+  const rows = await dbSelect<{ state: string }>(
+    "SELECT state FROM conversation_state WHERE conversation_id = ?",
+    [id],
+  );
+  return rows[0] ? JSON.parse(rows[0].state) : null;
+}
+
+export async function saveConversationState(id: number, state: unknown): Promise<void> {
   await dbExecute(
-    "INSERT INTO messages(conversation_id, role, content) VALUES(?, ?, ?)",
-    [conversationId, role, content],
+    "INSERT INTO conversation_state(conversation_id, state) VALUES(?, ?) " +
+      "ON CONFLICT(conversation_id) DO UPDATE SET " +
+      "state = excluded.state, updated_at = datetime('now')",
+    [id, JSON.stringify(state)],
+  );
+}
+
+/** A DB-backed SDK StateAccessor (`{ load, save }`) bound to one conversation. */
+export function conversationStateAccessor(id: number) {
+  return {
+    load: () => getConversationState(id),
+    save: (state: unknown) => saveConversationState(id, state),
+  };
+}
+
+// ---- interactive-form observability ----
+//
+// One row per form interaction: the spec the agent emitted, whether it
+// validated, the user's result, and how it ended. The `issues` column is the
+// dataset for "what are agents tripping on" — feeds tightening the DSL schema.
+
+export interface FormEvent {
+  conversationId: number | null;
+  toolName: string;
+  spec: unknown;
+  specValid: boolean;
+  issues?: unknown;
+  result?: unknown;
+  status: "submitted" | "spec_rejected" | "cancelled";
+}
+
+export async function logFormEvent(e: FormEvent): Promise<void> {
+  await dbExecute(
+    "INSERT INTO form_events(conversation_id, tool_name, spec, spec_valid, issues, result, status) " +
+      "VALUES(?, ?, ?, ?, ?, ?, ?)",
+    [
+      e.conversationId,
+      e.toolName,
+      JSON.stringify(e.spec ?? null),
+      e.specValid ? 1 : 0,
+      e.issues === undefined ? null : JSON.stringify(e.issues),
+      e.result === undefined ? null : JSON.stringify(e.result),
+      e.status,
+    ],
   );
 }
 

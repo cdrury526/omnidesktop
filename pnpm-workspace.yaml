@@ -1,3 +1,6 @@
+packages:
+  - "packages/*"
+  - "servers/*"
 verifyDepsBeforeRun: false
 onlyBuiltDependencies:
   - esbuild
