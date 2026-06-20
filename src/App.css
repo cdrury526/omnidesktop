@@ -1,0 +1,223 @@
+:root {
+  --bg: light-dark(#ffffff, #16161a);
+  --bg-soft: light-dark(#f5f5f7, #1f1f25);
+  --border: light-dark(#e3e3e8, #2c2c34);
+  --text: light-dark(#1f2230, #ececf1);
+  --muted: light-dark(#6b7280, #9aa0ad);
+  --accent: light-dark(#4f46e5, #818cf8);
+  --pane-width: clamp(360px, 42vw, 560px);
+  color-scheme: light dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---- Two-pane layout ---- */
+.layout {
+  position: relative;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.chat-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+  /* Make room shrink smoothly when the app pane slides in. */
+  transition: margin-right 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* When the app pane is open, nudge chat content left of it. */
+.layout:has(.app-pane.open) .chat-pane {
+  margin-right: var(--pane-width);
+}
+
+.chat-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chat-header h1 { font-size: 1.3rem; margin: 0 8px 0 0; }
+.subtitle { color: var(--muted); font-size: 0.85rem; }
+
+.status-line { color: var(--muted); font-size: 0.82rem; margin: 6px 0; }
+
+.chat-toolbar { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.chat-toolbar .ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
+
+/* ---- history drawer items ---- */
+.history-item { cursor: pointer; border-radius: 8px; padding-left: 8px !important; padding-right: 8px !important; }
+.history-item:hover { background: var(--bg-soft); }
+.history-item.active { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.history-title {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 210px;
+  font-size: 0.88rem;
+}
+.history-del { color: var(--muted); }
+.history-del:hover { color: light-dark(#dc2626, #f87171); }
+.key-status { font-size: 0.75rem; color: var(--muted); }
+.key-status.stored { color: light-dark(#15803d, #4ade80); }
+.key-status.unsaved { color: light-dark(#a16207, #fbbf24); }
+
+/* ---- chat ---- */
+.messages { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 8px 2px; }
+.bubble {
+  max-width: 80%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.bubble.assistant { align-self: flex-start; background: var(--bg-soft); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+
+.composer { display: flex; gap: 8px; align-items: flex-end; padding-top: 8px; }
+.composer textarea {
+  flex: 1;
+  resize: none;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.connect-row { display: flex; gap: 8px; margin: 16px 0 8px; }
+.connect-row input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+button {
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.55; cursor: default; }
+
+.error-banner {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: light-dark(#fef2f2, #3a1d1d);
+  color: light-dark(#b91c1c, #f87171);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.messages { overflow-y: auto; margin-top: 8px; }
+.hint { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+
+.tool-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.tool-list li { display: flex; flex-direction: column; gap: 2px; }
+.tool-list small { color: var(--muted); padding-left: 2px; }
+
+.tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.tool-btn.has-ui { border-color: var(--accent); }
+.tool-name { font-weight: 500; }
+
+.ui-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--accent);
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.context-log { margin-top: 16px; font-size: 0.8rem; }
+.context-log pre {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  overflow-x: auto;
+}
+
+/* ---- Slide-out app pane (Pane 2) ---- */
+.app-pane {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: var(--pane-width);
+  background: var(--bg-soft);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 28px -18px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.app-pane.open { transform: translateX(0); }
+
+.app-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.app-pane-title { font-weight: 600; font-size: 0.95rem; }
+.app-pane-close {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  font-size: 1rem;
+  padding: 2px 6px;
+}
+
+.app-pane-body { position: relative; flex: 1; overflow: auto; }
+.app-pane-surface { min-height: 100%; }
+.app-pane-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+.app-pane-note.error { color: light-dark(#b91c1c, #f87171); padding: 16px; text-align: center; }

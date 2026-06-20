@@ -1,0 +1,45 @@
+{
+  "name": "omni-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "sandbox": "tsx sandbox-server.ts",
+    "dev:all": "concurrently -k -n host,sandbox -c cyan,magenta \"vite\" \"tsx sandbox-server.ts\"",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.2.5",
+    "@ant-design/v5-patch-for-react-19": "^1.0.3",
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@openrouter/agent": "^0.7.2",
+    "@openrouter/sdk": "0.13.7",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-http": "^2.5.9",
+    "@tauri-apps/plugin-opener": "^2",
+    "antd": "^6.4.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^10.0.3",
+    "cors": "^2.8.6",
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.28.1",
+    "express": "^5.2.1",
+    "tsx": "^4.22.4",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}
