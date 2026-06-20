@@ -1,164 +1,86 @@
 # Omni Desktop
 
-A native Linux desktop agent (Tauri + React) that works with **any model** (via
-OpenRouter, later) and renders **interactive MCP App UIs** in a slide-out side
-pane — forms, dropdowns, pickers, etc. summoned by tool calls during a
-conversation.
+A native Linux desktop AI assistant (Tauri + React) that works with **any model**
+via [OpenRouter](https://openrouter.ai), and renders **interactive MCP App UIs**
+in a slide-out pane — forms, pickers, dashboards summoned by the model's tool calls.
 
-This repo currently contains the **host shell**: the two-pane layout, the
-slide-out animation, and a faithful port of the MCP Apps **host bridge** wired
-to a cross-origin sandbox. The agent/model loop (OpenRouter) is the next layer.
+The model only ever *calls a tool*; the host renders the UI deterministically
+from the tool's `ui://` resource. So rich, interactive panels work identically
+across every tool-capable model — no per-provider UI code.
 
----
+## Features
+
+- **Any model** — searchable picker over OpenRouter's full model catalog (filtered
+  to tool-capable models). Swap Claude / GPT / Gemini / DeepSeek / Llama with one click.
+- **Auto-summoning app pane** — when the model calls a tool that ships an
+  [MCP App](https://modelcontextprotocol.io) UI, a sandboxed panel slides out and
+  renders it; results flow back into the conversation.
+- **Secure by design** — the API key lives in the OS keyring; the DB and any cloud
+  token stay behind the Rust boundary, never exposed to the webview that hosts the
+  untrusted MCP App iframes (double-iframe, per-request CSP sandbox).
+- **Persistent history** — conversations and messages stored locally (libSQL),
+  with a searchable Ant Design history drawer.
+- **Local-first data, sync-ready** — libSQL embedded database now; flip a Cargo
+  flag to sync to [Turso](https://turso.tech) later, no schema or query changes.
 
 ## Architecture
 
 ```
-Tauri shell (native Linux window, webview on :1420)
-├─ Pane 1  React chat / controls            ← src/App.tsx
-├─ Pane 2  slide-out MCP App surface         ← src/components/AppPane.tsx
-│            └─ OUTER sandbox iframe  ──────────────┐  (src points at :1430)
-│                 └─ INNER iframe (untrusted app HTML, document.write)
-│
-├─ Host bridge (AppBridge wiring)            ← src/mcp/host-bridge.ts
-│    └─ MCP Client  ──HTTP/SSE──►  MCP App server(s)
-│
-└─ Cross-origin sandbox proxy (:1430)        ← sandbox-server.ts + src/mcp/sandbox.ts
+Tauri shell (native window)
+├─ React + Ant Design  ── chat, model picker, history drawer
+├─ Slide-out App pane   ── sandboxed iframe rendering MCP App UIs
+│     └─ cross-origin sandbox proxy (:1430) + AppBridge   [MCP Apps spec]
+├─ OpenRouter agent SDK ── tool-calling loop; tool execute → MCP call → auto-summon
+│     └─ HTTP routed through Rust (Tauri http plugin) to avoid webview CORS
+└─ Rust core
+      ├─ OS keyring (API key)
+      └─ libSQL data layer  (settings · mcp_servers · tabs · conversations · messages)
 ```
 
-### Why two origins (this is the load-bearing rule)
+## Prerequisites
 
-The MCP Apps spec **requires** the sandbox to run on a *different origin* than
-the host. We satisfy that with:
+- [Rust](https://rustup.rs) + [Node 18+](https://nodejs.org) + [pnpm](https://pnpm.io)
+- Linux system deps (Fedora):
+  ```bash
+  sudo dnf install webkit2gtk4.1-devel librsvg2-devel gtk3-devel \
+    libappindicator-gtk3-devel openssl-devel curl wget file
+  ```
 
-- **Host** on `http://localhost:1420` (Vite / Tauri webview).
-- **Sandbox proxy** on `http://localhost:1430` (`sandbox-server.ts`).
-
-Untrusted app HTML never touches the host origin. It is `document.write`-n into
-an **inner** iframe that lives inside the **outer** sandbox iframe (the relay,
-`src/mcp/sandbox.ts`), which only forwards validated postMessages between host
-and app. CSP is applied as an **HTTP header** built per-request from the app's
-`?csp=` metadata — tamper-proof, unlike a `<meta>` tag.
-
----
-
-## The host-bridge interface (verified against ext-apps `basic-host`)
-
-`AppBridge` (from `@modelcontextprotocol/ext-apps/app-bridge`) is **provided** —
-we wire it, we don't reimplement the protocol. The full lifecycle for one app
-activation, as implemented in `src/mcp/host-bridge.ts`:
-
-```
-callTool(serverInfo, name, input)            // invoke tool; if it declares
-   → ToolCallInfo { resultPromise,           //   _meta.ui.resourceUri, also
-                    appResourcePromise }      //   readResource() the UI html+csp
-
-mountApp(iframe, toolCallInfo, callbacks):
-   1. await appResourcePromise               // get { html, csp, permissions }
-   2. loadSandboxProxy(iframe, csp, perms)    // iframe.src = :1430/sandbox.html?csp=…
-      → resolves on "ui/notifications/sandbox-proxy-ready"
-   3. newAppBridge(serverInfo, iframe, cb)    // construct + register handlers
-   4. initializeApp(iframe, bridge, info):
-        bridge.connect(new PostMessageTransport(win, win))
-        bridge.sendSandboxResourceReady({ html, csp, permissions })
-        await oninitialized                    // inner iframe ready
-        bridge.sendToolInput({ arguments })
-        resultPromise.then(sendToolResult, sendToolCancelled)
-```
-
-**Host → app methods** (we call these): `connect`, `sendSandboxResourceReady`,
-`sendToolInput`, `sendToolResult`, `sendToolCancelled`, `sendHostContextChange`.
-
-**App → host callbacks** (we handle these, registered *before* `connect()`):
-`onmessage`, `onopenlink`, `onloggingmessage`, `onupdatemodelcontext`,
-`onsizechange`, `onrequestdisplaymode`, `oninitialized`.
-
-`onupdatemodelcontext` is the important one for the agent layer: it's how an app
-pushes structured data (a submitted form, a chosen value) **back into the model's
-context**. We surface it via the `onContextUpdate` callback (see App.tsx).
-
-> Model-agnostic by construction: the model's only job is to *call a tool*. It
-> never generates UI. The host renders deterministically from the tool's
-> `ui://` metadata, so every tool-calling model behaves identically.
-
----
-
-## Run it (dev)
-
-Native window (needs Linux system deps — see below):
+## Run
 
 ```bash
-pnpm tauri dev
+pnpm install
+pnpm tauri dev      # starts Vite + the cross-origin sandbox proxy + the window
 ```
 
-This runs `pnpm dev:all` (host on :1420 **and** the sandbox proxy on :1430) then
-opens the Tauri window.
+Then in the app: pick a model, paste your OpenRouter API key (saved to the keyring),
+connect to an MCP server, and chat. To try the app pane, run an
+[ext-apps](https://github.com/modelcontextprotocol/ext-apps) example server on
+`http://localhost:3001/mcp` and ask the model to use one of its tools.
 
-Browser-only (no native deps, good for UI work):
+> **NVIDIA + Wayland:** WebKitGTK's DMA-BUF renderer crashes on NVIDIA/Wayland;
+> the app sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` in the Rust entrypoint, so no
+> manual workaround is needed.
 
-```bash
-pnpm dev:all        # host :1420 + sandbox :1430
-# open http://localhost:1420
-```
-
-### Required Linux system packages (Fedora 44)
-
-The Tauri scaffold flagged `webkit2gtk` + `rsvg2` missing. Install:
-
-```bash
-sudo dnf install webkit2gtk4.1-devel librsvg2-devel \
-  gtk3-devel libappindicator-gtk3-devel \
-  openssl-devel curl wget file
-```
-
-(Frontend-only `pnpm dev:all` and `pnpm build` work **without** these.)
-
-### NVIDIA + Wayland note (already handled)
-
-On NVIDIA under Wayland, WebKitGTK's DMA-BUF renderer triggers a GDK
-"Error 71 (Protocol error)" that crashes the window before it draws. The fix is
-baked into `src-tauri/src/lib.rs`: we set `WEBKIT_DISABLE_DMABUF_RENDERER=1` at
-the top of `run()` (Linux only, respecting any user override). This applies to
-both `tauri dev` and the bundled app — no shell env or wrapper needed. (Note:
-this is independent of which GPU driver you run; it reproduced on both nouveau
-and the proprietary driver.)
-
-### Test end-to-end with a real MCP App server
-
-The host needs something that serves an MCP App. Use an ext-apps example:
-
-```bash
-git clone https://github.com/modelcontextprotocol/ext-apps.git
-cd ext-apps/examples/qr-server && npm install && npm run build && npm run serve
-# serves an MCP App server on http://localhost:3001/mcp
-```
-
-Then in Omni Desktop: connect to `http://localhost:3001/mcp`, and click a tool
-marked `app`. The side pane slides out and renders the app's UI.
-
----
-
-## Status / next steps
-
-- [x] Tauri + React scaffold, two-pane slide-out shell
-- [x] MCP Apps host bridge (AppBridge) ported + wired
-- [x] Cross-origin sandbox proxy with per-request CSP header
-- [ ] **OpenRouter agent loop** — model picker + tool-calling; route tool calls
-      with `_meta.ui` to the pane. (`@openrouter/agent`)
-- [ ] **OS keyring** for the OpenRouter API key (libsecret).
-- [ ] **Production cross-origin** — in a bundled app there's no Vite. Run the
-      `sandbox-server.ts` logic as a **Tauri sidecar** bound to a localhost port,
-      and update `ALLOWED_REFERRER_PATTERN` in `src/mcp/sandbox.ts` +
-      `VITE_SANDBOX_URL` to match the packaged host origin.
-- [ ] Multiple concurrent apps / pane history (currently one app at a time).
-
-## Layout
+## Project layout
 
 | Path | Role |
 |------|------|
-| `src/App.tsx` | Host shell: connect, tool list, activation, context log |
-| `src/components/AppPane.tsx` | Slide-out pane; drives `mountApp` lifecycle |
-| `src/mcp/host-bridge.ts` | AppBridge wiring (the load-bearing port) |
-| `src/mcp/sandbox.ts` | Outer-iframe relay (runs on :1430, cross-origin) |
-| `src/mcp/host-styles.ts` / `theme.ts` | host context styles + theme |
-| `sandbox-server.ts` | Serves the relay with tamper-proof CSP header on :1430 |
+| `src/App.tsx` | Host shell: chat, model/key/server, persistence wiring |
+| `src/components/AppPane.tsx` | Slide-out pane; drives the MCP App bridge lifecycle |
+| `src/components/HistoryDrawer.tsx` | Searchable conversation history (Ant Design) |
+| `src/agent/runner.ts` | OpenRouter agent loop; MCP tools → SDK tools w/ auto-summon |
+| `src/mcp/host-bridge.ts` | MCP Apps host bridge (AppBridge wiring) |
+| `src/lib/db.ts` · `src/lib/secrets.ts` | DB + keyring frontend APIs |
+| `src-tauri/src/db.rs` | libSQL data layer behind `db_execute`/`db_select` commands |
+| `sandbox-server.ts` | Cross-origin sandbox proxy with per-request CSP |
+
+## Roadmap
+
+- Turso cloud sync (flag-flip in `src-tauri/Cargo.toml`)
+- Production cross-origin sandbox (run the proxy as a Tauri sidecar)
+- MCP server manager UI · conversation rename · multiple concurrent app panes
+
+## Tech
+
+Tauri 2 · React 19 · Ant Design 6 · `@openrouter/agent` · `@modelcontextprotocol/ext-apps` · libSQL · keyring
