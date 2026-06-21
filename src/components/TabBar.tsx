@@ -8,8 +8,8 @@
  * Uses antd `Tabs` as a pure tab strip — session content is rendered separately
  * in App.tsx so hidden tabs stay mounted and keep streaming.
  */
-import { Tabs } from "antd";
-import { CodeOutlined, MessageOutlined } from "@ant-design/icons";
+import { CloseOutlined, CodeOutlined, MessageOutlined } from "@ant-design/icons";
+import { ConfigProvider, Tabs } from "antd";
 
 export interface TabInfo {
   key: string;
@@ -30,26 +30,42 @@ interface Props {
 export function TabBar({ tabs, activeKey, onSelect, onClose, onAdd }: Props) {
   return (
     <div className="tab-bar">
-      <Tabs
-        className="tab-bar-tabs"
-        type="editable-card"
-        activeKey={activeKey}
-        onChange={onSelect}
-        onEdit={(targetKey, action) => {
-          if (action === "add") onAdd();
-          else if (typeof targetKey === "string") onClose(targetKey);
+      <ConfigProvider
+        theme={{
+          components: {
+            Tabs: {
+              cardGutter: 0,
+              cardBg: "transparent",
+              cardHeight: 38,
+              cardPadding: "0 12px",
+              borderRadiusLG: 0,
+            },
+          },
         }}
-        items={tabs.map((t) => ({
-          key: t.key,
-          label: (
-            <span className="tab-label-wrap" title={t.label} data-tab-key={t.key}>
-              <span className="tab-icon">{t.code ? <CodeOutlined /> : <MessageOutlined />}</span>
-              <span className="tab-label">{t.label}</span>
-              {t.busy && <span className="tab-busy" aria-label="Busy" />}
-            </span>
-          ),
-        }))}
-      />
+      >
+        <Tabs
+          className="tab-bar-tabs"
+          type="editable-card"
+          size="small"
+          activeKey={activeKey}
+          onChange={onSelect}
+          onEdit={(targetKey, action) => {
+            if (action === "add") onAdd();
+            else if (typeof targetKey === "string") onClose(targetKey);
+          }}
+          removeIcon={<CloseOutlined />}
+          items={tabs.map((t) => ({
+            key: t.key,
+            label: (
+              <span className="tab-label-wrap" title={t.label} data-tab-key={t.key}>
+                <span className="tab-icon">{t.code ? <CodeOutlined /> : <MessageOutlined />}</span>
+                <span className="tab-label">{t.label}</span>
+                {t.busy && <span className="tab-busy" aria-label="Busy" />}
+              </span>
+            ),
+          }))}
+        />
+      </ConfigProvider>
     </div>
   );
 }

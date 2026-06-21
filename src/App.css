@@ -79,14 +79,20 @@ html, body, #root {
 .tab-bar-tabs .ant-tabs-content-holder { display: none; }
 .tab-bar-tabs .ant-tabs-nav-wrap { height: 100%; }
 .tab-bar-tabs .ant-tabs-nav-list { height: 100%; align-items: stretch; }
-.tab-bar-tabs .ant-tabs-tab {
+
+/* Strip editable-card chrome — flat VS Code tabs, flush with no card gaps. */
+.tab-bar-tabs.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab,
+.tab-bar-tabs.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab,
+.tab-bar-tabs.ant-tabs-editable-card > .ant-tabs-nav .ant-tabs-tab,
+.tab-bar-tabs.ant-tabs-editable-card > div > .ant-tabs-nav .ant-tabs-tab {
   position: relative;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
   height: 100%;
   margin: 0 !important;
-  padding: 0 8px 0 12px !important;
+  padding: 0 10px 0 12px !important;
+  min-height: unset !important;
+  min-width: unset !important;
   font-size: 0.78rem;
   font-weight: 500;
   color: var(--muted);
@@ -96,18 +102,26 @@ html, body, #root {
   background: transparent !important;
   transition: background 120ms, color 120ms;
 }
-.tab-bar-tabs .ant-tabs-tab:hover {
+.tab-bar-tabs.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab + .ant-tabs-tab,
+.tab-bar-tabs.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: 0 !important;
+}
+.tab-bar-tabs.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab:hover,
+.tab-bar-tabs.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab:hover {
   background: color-mix(in srgb, var(--accent) 7%, transparent) !important;
   color: var(--muted);
 }
-.tab-bar-tabs .ant-tabs-tab-active {
+.tab-bar-tabs.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active,
+.tab-bar-tabs.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab-active {
   background: var(--bg) !important;
   color: var(--accent);
   font-weight: 600;
   border-left: 1px solid var(--border) !important;
   border-right: 1px solid var(--border) !important;
+  border-bottom-color: transparent !important;
 }
-.tab-bar-tabs .ant-tabs-tab-active::after {
+.tab-bar-tabs.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active::after,
+.tab-bar-tabs.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-tab-active::after {
   content: "";
   position: absolute;
   left: 0;
@@ -115,14 +129,26 @@ html, body, #root {
   bottom: -1px;
   height: 2px;
   background: var(--accent);
+  z-index: 1;
 }
-.tab-bar-tabs .ant-tabs-tab-btn { color: inherit; }
+.tab-bar-tabs .ant-tabs-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  color: inherit;
+  outline: none;
+}
+.tab-bar-tabs .ant-tabs-tab:not(.ant-tabs-tab-active) .ant-tabs-tab-btn { color: var(--muted); }
+.tab-bar-tabs .ant-tabs-tab-active .ant-tabs-tab-btn { color: var(--accent); font-weight: 600; }
 .tab-bar-tabs .ant-tabs-tab-remove {
+  flex: none;
   opacity: 0;
-  margin-left: 2px !important;
+  margin: 0 0 0 4px !important;
   padding: 1px !important;
   border-radius: 4px;
   font-size: 0.7rem;
+  color: inherit !important;
   transition: opacity 120ms, background 120ms;
 }
 .tab-bar-tabs .ant-tabs-tab:hover .ant-tabs-tab-remove,
@@ -131,34 +157,38 @@ html, body, #root {
   opacity: 1 !important;
   background: color-mix(in srgb, var(--text) 12%, transparent);
 }
-.tab-bar-tabs .ant-tabs-nav-add {
+.tab-bar-tabs.ant-tabs-card > .ant-tabs-nav .ant-tabs-nav-add,
+.tab-bar-tabs.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-nav-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
-  min-width: 26px;
+  min-width: 26px !important;
+  min-height: 26px !important;
   margin: auto 0 auto 8px !important;
   flex-shrink: 0;
   background: transparent !important;
   border: none !important;
-  color: var(--muted) !important;
   border-radius: 50% !important;
+  color: var(--muted) !important;
   font-size: 0.8rem;
   transition: background 120ms, color 120ms;
 }
-.tab-bar-tabs .ant-tabs-nav-add:hover {
+.tab-bar-tabs.ant-tabs-card > .ant-tabs-nav .ant-tabs-nav-add:hover,
+.tab-bar-tabs.ant-tabs-card > div > .ant-tabs-nav .ant-tabs-nav-add:hover {
   color: var(--accent) !important;
   background: color-mix(in srgb, var(--accent) 12%, transparent) !important;
 }
-.tab-label-wrap { display: inline-flex; align-items: center; gap: 7px; }
-.tab-icon { display: inline-flex; font-size: 0.85rem; }
+.tab-label-wrap { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.tab-icon { display: inline-flex; font-size: 0.85rem; flex-shrink: 0; }
 .tab-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .tab-busy {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
+  flex-shrink: 0;
   animation: tab-pulse 1.1s ease-in-out infinite;
 }
 @keyframes tab-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
