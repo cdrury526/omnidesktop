@@ -10,6 +10,7 @@ import { Conversations, type ConversationItemType } from "@ant-design/x";
 import { Empty, Tooltip } from "antd";
 import { CodeOutlined, FolderOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
+import { ConversationLabel } from "./ConversationLabel";
 import { deleteConversationMenu } from "./conversationMenu";
 
 interface Props {
@@ -28,12 +29,13 @@ function folderName(path: string): string {
 }
 
 function toItem(c: ConversationRow): ConversationItemType {
+  const title = c.title || `Chat ${c.id}`;
   return {
     key: String(c.id),
-    label: c.title || `Chat ${c.id}`,
+    label: <ConversationLabel title={title} updatedAt={c.updated_at} />,
     group: c.working_dir ?? undefined,
     icon: <CodeOutlined />,
-    "aria-label": c.title || `Chat ${c.id}`,
+    "aria-label": title,
     "data-conversation-id": c.id,
   };
 }

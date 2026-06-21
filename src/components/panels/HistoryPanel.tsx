@@ -8,6 +8,7 @@ import { Conversations, type ConversationItemType } from "@ant-design/x";
 import { Empty, Input } from "antd";
 import { MessageOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
+import { ConversationLabel } from "./ConversationLabel";
 import { deleteConversationMenu } from "./conversationMenu";
 
 interface Props {
@@ -18,11 +19,12 @@ interface Props {
 }
 
 function toItem(c: ConversationRow): ConversationItemType {
+  const title = c.title || `Chat ${c.id}`;
   return {
     key: String(c.id),
-    label: c.title || `Chat ${c.id}`,
+    label: <ConversationLabel title={title} updatedAt={c.updated_at} />,
     icon: <MessageOutlined />,
-    "aria-label": c.title || `Chat ${c.id}`,
+    "aria-label": title,
     "data-conversation-id": c.id,
   };
 }
