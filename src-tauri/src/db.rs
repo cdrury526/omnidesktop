@@ -86,7 +86,16 @@ async fn migrate(conn: &Connection) -> Result<(), libsql::Error> {
             result          TEXT,
             status          TEXT NOT NULL,
             created_at      TEXT NOT NULL DEFAULT (datetime('now'))
-        );",
+        );
+        CREATE TABLE IF NOT EXISTS events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+            source          TEXT NOT NULL,
+            type            TEXT NOT NULL,
+            conversation_id INTEGER,
+            data            TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_events_id ON events(id);",
     )
     .await?;
     Ok(())

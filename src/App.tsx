@@ -20,6 +20,7 @@ import {
 } from "./agent/runner";
 import { isFormSubmit, isFormCancel, readFormDirty, validateResult, type FormSpec } from "@omni/forms-dsl";
 import { useDebugBridge } from "./lib/debug-bridge";
+import { logEvent, installErrorCapture, type EventSource } from "./lib/events";
 import { ModelPicker } from "./components/ModelPicker";
 import { AppPane } from "./components/AppPane";
 import { getApiKey, saveApiKey, deleteApiKey, keyringAvailable } from "./lib/secrets";
@@ -53,6 +54,11 @@ export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [keyStatus, setKeyStatus] = useState<"loading" | "stored" | "unsaved" | "empty">("loading");
   const [model, setModel] = useState("");
+
+  // Capture swallowed errors into the event log so a "weird thing" leaves a trace.
+  useEffect(() => {
+    installErrorCapture();
+  }, []);
 
   // Load the saved key from the OS keyring once on mount.
   useEffect(() => {
@@ -225,8 +231,11 @@ export default function App() {
       setServerOptions((opts) =>
         opts.some((o) => o.value === url) ? opts : [...opts, { value: url }],
       );
+      logEvent({ source: "user", type: "connect", data: { url, name: info.name, tools: info.tools.size } });
     } catch (e) {
-      setConnError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setConnError(msg);
+      logEvent({ source: "user", type: "connect.error", data: { url, error: msg } });
     } finally {
       setConnecting(false);
     }
@@ -257,7 +266,7 @@ export default function App() {
 
   /** Run one user turn for `text`. Returns the conversation id it ran against. */
   const runUserTurn = useCallback(
-    async (text: string): Promise<number | null> => {
+    async (text: string, source: EventSource = "user"): Promise<number | null> => {
       if (!text || busy) return null;
       if (!apiKey) { setConnError("Enter your OpenRouter API key first."); return null; }
       if (!model) { setConnError("Pick a model first."); return null; }
@@ -275,6 +284,8 @@ export default function App() {
         { kind: "msg", role: "assistant", content: "" },
       ]);
       setBusy(true);
+      const startedAt = performance.now();
+      logEvent({ source, type: "turn.start", conversationId: convId, data: { model, chars: text.length } });
 
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       const state = conversationStateAccessor(convId);
@@ -284,14 +295,18 @@ export default function App() {
         // Self-repair: if the model described a form but didn't call the tool,
         // re-prompt once with the tool forced (only when the forms tool exists).
         if (server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
+          logEvent({ source: "repair", type: "repair.fired", conversationId: convId });
           await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant });
           st = await getConversationState(convId);
         }
         // Reconcile with persisted state (surfaces tool cards). The panel, if a
         // form paused, was already opened by onAutoSummon mid-turn.
         applyState(st);
+        logEvent({ source, type: "turn.end", conversationId: convId, data: { ms: Math.round(performance.now() - startedAt), formOpened: !!pendingHitlCall(st) } });
       } catch (e) {
-        setAssistantError(e instanceof Error ? e.message : String(e));
+        const msg = e instanceof Error ? e.message : String(e);
+        setAssistantError(msg);
+        logEvent({ source, type: "turn.error", conversationId: convId, data: { ms: Math.round(performance.now() - startedAt), error: msg } });
       } finally {
         setBusy(false);
         await touchConversation(convId);
@@ -309,10 +324,11 @@ export default function App() {
     // Only send when the agent is "open"; otherwise queue (and show it queued).
     if (busy || formPending) {
       setQueued((q) => [...q, text]);
+      logEvent({ source: "user", type: "queue.enqueue", conversationId, data: { reason: busy ? "busy" : "form-open" } });
       return;
     }
     await runUserTurn(text);
-  }, [input, busy, formPending, runUserTurn]);
+  }, [input, busy, formPending, conversationId, runUserTurn]);
 
   // Flush the next queued message once the agent is free (not busy, no open form).
   useEffect(() => {
@@ -320,10 +336,11 @@ export default function App() {
     flushingRef.current = true;
     const next = queued[0];
     setQueued((q) => q.slice(1));
-    void runUserTurn(next).finally(() => {
+    logEvent({ source: "queue", type: "queue.flush", conversationId, data: { remaining: queued.length - 1 } });
+    void runUserTurn(next, "queue").finally(() => {
       flushingRef.current = false;
     });
-  }, [busy, formPending, queued, runUserTurn]);
+  }, [busy, formPending, queued, conversationId, runUserTurn]);
 
   /**
    * Feed an output back to the pending HITL call and resume. `build` derives the
@@ -344,6 +361,7 @@ export default function App() {
       const built = build(pending);
       if (!built) return null;
       void logFormEvent(built.log);
+      logEvent({ source: "user", type: `form.${built.log.status}`, conversationId: convId, data: { tool: pending.name } });
 
       setActivation(null);
       setBusy(true);
@@ -462,7 +480,7 @@ export default function App() {
       return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
     },
     send: async (text) => {
-      const convId = await runUserTurn(text);
+      const convId = await runUserTurn(text, "debug-bridge");
       const st = convId != null ? await getConversationState(convId) : null;
       return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
     },
