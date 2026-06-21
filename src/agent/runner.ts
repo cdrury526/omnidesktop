@@ -374,6 +374,10 @@ export type DisplayItem =
       callId: string;
       name: string;
       status: "pending" | "done" | "error" | "cancelled";
+      /** Raw call arguments (e.g. the form spec), for the expandable detail. */
+      args?: unknown;
+      /** Raw tool output once resolved, for the expandable detail. */
+      result?: string;
     };
 
 function itemText(content: unknown): string {
@@ -408,11 +412,17 @@ export function displayItemsFromState(state: unknown): DisplayItem[] {
     const role = item.role as string | undefined;
 
     if (type === "function_call") {
+      const rawArgs = item.arguments ?? item.args;
+      let args: unknown = rawArgs;
+      if (typeof rawArgs === "string") {
+        try { args = JSON.parse(rawArgs); } catch { args = rawArgs; }
+      }
       const card: Extract<DisplayItem, { kind: "tool" }> = {
         kind: "tool",
         callId: callIdOf(item),
         name: (item.name as string) ?? "tool",
         status: "pending",
+        args,
       };
       cardByCall.set(card.callId, card);
       out.push(card);
@@ -422,6 +432,7 @@ export function displayItemsFromState(state: unknown): DisplayItem[] {
       const card = cardByCall.get(callIdOf(item));
       if (card) {
         const output = typeof item.output === "string" ? item.output : JSON.stringify(item.output);
+        card.result = output;
         card.status = output.includes('"cancelled"')
           ? "cancelled"
           : output.includes('"error"')
