@@ -29,6 +29,10 @@ src-tauri/target
 # Demo MCP App servers cloned locally for testing (their own git repo)
 ext-apps/
 
+# Local Claude Code config (plugin enablement etc.) — machine-specific
+.claude/settings.json
+.claude/settings.local.json
+
 # Local database files (data lives in app data dir, but never commit any)
 *.db
 *.db-shm

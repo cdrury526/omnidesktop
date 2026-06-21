@@ -12,7 +12,19 @@ in libSQL, API key in the OS keyring.
 
 Status: **working end-to-end and pushed to GitHub** (`cdrury526/omnidesktop`).
 Verified live: model picker, keyring, MCP connect, agent tool-calling,
-auto-summon pane rendering a real MCP App, chat history persistence + drawer.
+interactive forms (HITL) with durable pause/resume, message queuing, cancel.
+
+## ▶ NEXT TASK — `ANTD_X_ADOPTION_PLAN.md`
+
+The next body of work is **adopting Ant Design X for the chat UI and antd for the
+form inputs** — see **`ANTD_X_ADOPTION_PLAN.md`** at the repo root. It's a phased,
+bridge-verified plan (start at Phase 0). It fixes two reported bugs (no
+autoscroll; broken native datepicker) and replaces the hand-rolled chat with
+`Bubble.List` / `XMarkdown` / `Sender` / `ThoughtChain` / `Welcome`+`Prompts`,
+keeping the `@openrouter/agent` loop, MCP Apps sandbox, persistence, and
+observability untouched. Use the `x-components`, `x-markdown`, and `antd` skills
+(all in `.claude/skills/`), and verify each phase with the **debug bridge** (the
+`omni-debug-bridge` skill) before moving on.
 
 ## Run / verify
 
@@ -39,9 +51,14 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 | Slide-out MCP App pane (bridge lifecycle) | `src/components/AppPane.tsx` |
 | Searchable history drawer (Ant) | `src/components/HistoryDrawer.tsx` |
 | Model picker (Ant Select over OpenRouter catalog) | `src/components/ModelPicker.tsx` |
-| **Agent loop** (OpenRouter SDK; MCP tools → SDK tools; auto-summon) | `src/agent/runner.ts` |
+| **Agent loop** (OpenRouter SDK; HITL forms; queue/repair; tool reliability) | `src/agent/runner.ts` |
 | Model catalog fetch | `src/agent/models.ts` |
 | JSON Schema → Zod (for SDK `tool()` inputSchema) | `src/agent/json-schema-to-zod.ts` |
+| **Interactive-forms DSL** (field union, `when`, validators, Zod schema) | `packages/forms-dsl/` |
+| **Interactive-forms MCP App server** (generic renderer) | `servers/forms/` |
+| Source-attributed event log (`logEvent`/`getEvents` + error capture) | `src/lib/events.ts` |
+| **Debug bridge** (webview side: drive/inspect over HTTP) | `src/lib/debug-bridge.ts` |
+| **Debug bridge** (Rust side: tiny_http server on :1456, dev-only) | `src-tauri/src/debug.rs` |
 | **MCP Apps host bridge** (AppBridge wiring) | `src/mcp/host-bridge.ts` |
 | Sandbox relay (runs in the cross-origin outer iframe) | `src/mcp/sandbox.ts` |
 | Host context styles / theme for app UIs | `src/mcp/host-styles.ts`, `src/mcp/theme.ts` |
@@ -54,13 +71,22 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 | Tauri config / capabilities | `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json` |
 
 DB file at runtime: `~/.local/share/com.drury.omni-desktop/omni.db`
-(tables: `settings`, `mcp_servers`, `tabs`, `conversations`, `messages`).
+(tables: `settings`, `mcp_servers`, `tabs`, `conversations`, `messages` (legacy),
+`conversation_state` (SDK state per chat), `form_events`, `events` (timeline)).
+
+**Debugging without a human in the loop:** a dev-only HTTP bridge on
+`127.0.0.1:1456` lets an agent drive and inspect the running app — connect,
+`/newchat`, `/send`, `/openform` (deterministic form, forced tool call),
+`/forminput`/`/formclick` (drive the cross-origin form), `/type`/`/press`/`/click`
+(host input), `/dom`/`/formdom` (computed layout), `/state`, `/events`
+(source-attributed timeline), `/snapshot`. See the **`omni-debug-bridge` skill**.
+Gated to dev builds (`#[cfg(debug_assertions)]` + `import.meta.env.DEV`).
 
 ## Conventions / rules
 
 - **No source file over 600 lines.** If a file approaches it, split by concern.
-  Current largest: `App.tsx` (457 — extract `useAgentChat` soon),
-  `host-bridge.ts` (352), `runner.ts` (298).
+  `App.tsx` is now **683 — over the cap**; extracting `useAgentChat` is part of
+  `ANTD_X_ADOPTION_PLAN.md` Phase 7 (the chat refactor naturally shrinks it).
 - **Match surrounding style.** Comment density, naming, and idiom already vary
   by file — follow the file you're in.
 - **Secrets never cross into the webview.** API key → keyring (Rust); DB and any
@@ -183,21 +209,38 @@ re-appears and still submits.
 
 Follow-ups are tracked in the Backlog below.
 
+## DONE — debug bridge, observability, queuing, reliability (this session)
+
+All verified headlessly via the bridge unless noted.
+
+- **Form cancel** — pane ✕ and an in-form Cancel button resolve the HITL call as
+  cancelled; card → `cancelled`; confirm-on-cancel only if the form is dirty
+  (form reports `FORM_DIRTY_KEY` across the cross-origin boundary). The
+  dirty→`Modal.confirm` branch is verifiable headlessly now (drive a field dirty,
+  click ✕, click Discard).
+- **Debug bridge** (`debug.rs` + `debug-bridge.ts`, dev-only) — drive/inspect the
+  app over HTTP, incl. **headless user-input simulation** (host `/type`/`/press`/
+  `/click`; in-iframe `/forminput`/`/formclick` via a form↔bridge channel) and
+  `/openform` (deterministic forms). The **`omni-debug-bridge` skill** documents it.
+- **Message queuing** — typing while busy or a form is open queues (rendered as
+  "queued"), flushes when the agent is free; fixes the chat-while-form-open bug.
+- **Tool-call reliability guardrails** (engineering around intermittent
+  tool-calling, not model-swapping) — strengthened system prompt + one-shot
+  example; `tool_choice` forcing (`/openform`); and **self-repair**: after a turn
+  that described a form but didn't call the tool, re-prompt once with the tool
+  forced (`describedButDidntCall` + `repairToolCall`).
+- **Observability** — `events` table + `logEvent`/`getEvents` with a **`source`**
+  column (user / debug-bridge / queue / repair / system) + global error capture;
+  `tool.call`/`tool.result` events tied to `conversation_state` by `callId`.
+  Read the timeline via `/events`. This is the "what happened and who did it" log.
+
 ## Backlog
 
-From the interactive-forms work:
-- ~~Form-cancel path~~ **DONE.** Pane ✕ and an in-form Cancel button both resolve
-  the HITL call as cancelled (`{ cancelled: true }`), card → `cancelled`, agent
-  acknowledges, `cancelled` row logged. Confirms only if the form is dirty — the
-  form reports a dirty flag to the host (cross-origin) via `updateModelContext`
-  (`FORM_DIRTY_KEY`). NOTE: the dirty→`Modal.confirm` branch is the one path not
-  verified headlessly (needs a click); the resolution path is verified via the
-  bridge's `/cancel`.
+- **`ANTD_X_ADOPTION_PLAN.md` — the next major effort** (see top). Includes the
+  `useAgentChat` extraction (Phase 7) to get `App.tsx` back under 600 lines.
 - Inline-panel embedding in the transcript (cards currently link to the side
   pane; the chosen UX is the rendered app inline per card).
-- Extract a `useAgentChat` hook from `App.tsx` (457 lines) before it hits the
-  600-line cap.
-
-Other:
+- Live multi-turn tool-persistence sanity check (call a tool, reload, reference
+  the earlier result) — built + headless-verified, not yet eyeballed live.
 - Turso sync · production sandbox sidecar · MCP server manager UI · conversation
   rename · multiple concurrent app panes · code-split the 1MB+ JS bundle.
