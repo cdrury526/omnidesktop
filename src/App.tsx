@@ -1,18 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
-import { Bubble, Sender, ThoughtChain } from "@ant-design/x";
-import { AssistantMarkdown } from "./components/MarkdownCode";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connectToServer, type ServerInfo } from "./mcp/host-bridge";
-import { type DisplayItem } from "./agent/runner";
 import { useDebugBridge } from "./lib/debug-bridge";
 import { logEvent, installErrorCapture } from "./lib/events";
-import { useAgentChat } from "./hooks/useAgentChat";
-import { ModelPicker } from "./components/ModelPicker";
-import { CodeModeToggle } from "./components/CodeModeToggle";
-import { AppPane } from "./components/AppPane";
 import { SideRail, type RailSection } from "./components/SideRail";
 import { HistoryPanel } from "./components/panels/HistoryPanel";
 import { ProjectsPanel } from "./components/panels/ProjectsPanel";
 import { SettingsPanel } from "./components/panels/SettingsPanel";
+import { TabBar, type TabInfo } from "./components/TabBar";
+import { ChatSession, type SessionMeta, type BridgeHandlers } from "./components/ChatSession";
 import { getApiKey, saveApiKey, deleteApiKey } from "./lib/secrets";
 import {
   getSetting,
@@ -23,7 +18,6 @@ import {
   deleteConversation,
   type ConversationRow,
 } from "./lib/db";
-import { ChatWelcome } from "./components/ChatWelcome";
 import { PlusOutlined } from "@ant-design/icons";
 import "./App.css";
 
@@ -38,65 +32,26 @@ const RAIL_TITLES: Record<RailSection, string> = {
 
 const DEFAULT_SERVER = "http://localhost:3001/mcp";
 
-type ToolItem = Extract<DisplayItem, { kind: "tool" }>;
-
-// Our tool-call statuses → ThoughtChain step status + a friendly label.
-const TOOL_STATUS: Record<ToolItem["status"], { status: "loading" | "success" | "error" | "abort"; label: string }> = {
-  pending: { status: "loading", label: "awaiting input" },
-  done: { status: "success", label: "done" },
-  error: { status: "error", label: "error" },
-  cancelled: { status: "abort", label: "cancelled" },
-};
-
-function pretty(v: unknown): string {
-  if (v == null) return "";
-  if (typeof v === "string") {
-    try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; }
-  }
-  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+/** One open tab: a mounted ChatSession. The live conversation id lives inside
+ * the session and is reported back via `meta`; here we hold only what's needed
+ * to mount it (the conversation to open, or a folder for a new project chat). */
+interface Tab {
+  key: string;
+  initialConversationId: number | null;
+  initialWorkingDir?: string | null;
 }
 
-/**
- * One tool call rendered as a ThoughtChain step: status + expandable detail
- * (the call args — e.g. the form spec — and the result, linked by callId via
- * the persisted conversation_state). Self-contained expand state so it can live
- * inside Bubble.List's per-item contentRender.
- */
-function ToolStep({ item }: { item: ToolItem }) {
-  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
-  const map = TOOL_STATUS[item.status];
-  const argsText = pretty(item.args);
-  const resultText = item.status === "pending" ? "" : pretty(item.result);
-  const detail = [argsText && `arguments:\n${argsText}`, resultText && `result:\n${resultText}`]
-    .filter(Boolean)
-    .join("\n\n");
-  return (
-    <ThoughtChain
-      className="tool-chain"
-      items={[
-        {
-          key: item.callId || item.name,
-          title: item.name,
-          description: map.label,
-          status: map.status,
-          blink: item.status === "pending",
-          collapsible: !!detail,
-          content: detail ? (
-            <pre className="tool-detail">{detail}</pre>
-          ) : undefined,
-        },
-      ]}
-      expandedKeys={expandedKeys}
-      onExpand={setExpandedKeys}
-    />
-  );
+/** Last path segment — the folder's own name, for a code tab's label. */
+function folderName(path: string): string {
+  const parts = path.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
 }
 
 export default function App() {
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
   const [server, setServer] = useState<ServerInfo | null>(null);
   const [connecting, setConnecting] = useState(false);
-  const [connError, setConnError] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   const [apiKey, setApiKey] = useState("");
   const [keyStatus, setKeyStatus] = useState<"loading" | "stored" | "unsaved" | "empty">("loading");
@@ -148,7 +103,6 @@ export default function App() {
     }
   }, [apiKey]);
 
-  const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   // The rail section whose panel is open (null = collapsed to icons only).
   const [railSection, setRailSection] = useState<RailSection | null>(null);
@@ -157,84 +111,132 @@ export default function App() {
     setConversations(await listConversations());
   }, []);
 
-  // The chat session for the active conversation (transcript, composer, turn +
-  // form actions). App keeps connection, the conversation list, and rendering.
-  const chat = useAgentChat({
-    apiKey,
-    model,
-    server,
-    conversationId,
-    setConversationId,
-    onConversationsChanged: refreshConversations,
-    setConnError,
-  });
-  const {
-    messages, input, setInput, busy, queued, setQueued, formPending, activation,
-    codeMode, workingDir, setCodeMode, setWorkingDir,
-    submit, cancelTurn, hydrate, resetChat, startProjectChat, onAppContext, onPaneClose,
-  } = chat;
+  // ---- open tabs (each is a live ChatSession) ----
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [activeKey, setActiveKey] = useState("");
+  const [meta, setMeta] = useState<Record<string, SessionMeta>>({});
+  const tabSeq = useRef(0);
+  const nextKey = () => `t${++tabSeq.current}`;
+
+  // The active tab, readable from the stable bridge dispatchers.
+  const activeKeyRef = useRef(activeKey);
+  useEffect(() => {
+    activeKeyRef.current = activeKey;
+  }, [activeKey]);
 
   const toggleRail = useCallback((section: RailSection) => {
     setRailSection((cur) => (cur === section ? null : section));
   }, []);
 
-  // Restore the most recent conversation on mount.
+  // Restore the most recent conversation as the first tab on mount.
   useEffect(() => {
     (async () => {
       const convs = await listConversations();
       setConversations(convs);
-      if (convs.length > 0) {
-        setConversationId(convs[0].id);
-        await hydrate(convs[0].id);
-      }
+      const key = nextKey();
+      setTabs([{ key, initialConversationId: convs[0]?.id ?? null }]);
+      setActiveKey(key);
     })();
-  }, [hydrate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const newChat = useCallback(() => {
-    setConversationId(null);
-    resetChat();
-    setConnError(null);
-  }, [resetChat]);
+  /** A session reports its conversation id / code mode / busy for the tab label. */
+  const handleMeta = useCallback((key: string, m: SessionMeta) => {
+    setMeta((prev) => {
+      const cur = prev[key];
+      if (cur && cur.conversationId === m.conversationId && cur.workingDir === m.workingDir && cur.codeMode === m.codeMode && cur.busy === m.busy) {
+        return prev;
+      }
+      return { ...prev, [key]: m };
+    });
+  }, []);
 
-  // Start a fresh chat already bound to a project folder (code mode on). The
-  // working dir + mode persist when the first turn creates the conversation.
-  const newChatInProject = useCallback(
-    (dir: string) => {
-      setConversationId(null);
-      setConnError(null);
-      startProjectChat(dir);
-    },
-    [startProjectChat],
+  // Bridge handlers per session; the debug bridge dispatches to the focused tab.
+  const bridgeRef = useRef<Map<string, BridgeHandlers>>(new Map());
+  const registerBridge = useCallback((key: string, handlers: BridgeHandlers | null) => {
+    if (handlers) bridgeRef.current.set(key, handlers);
+    else bridgeRef.current.delete(key);
+  }, []);
+
+  const newBlankTab = useCallback(() => {
+    const key = nextKey();
+    setTabs((prev) => [...prev, { key, initialConversationId: null }]);
+    setActiveKey(key);
+  }, []);
+
+  const newChatInProject = useCallback((dir: string) => {
+    const key = nextKey();
+    setTabs((prev) => [...prev, { key, initialConversationId: null, initialWorkingDir: dir }]);
+    setActiveKey(key);
+  }, []);
+
+  const convIdOfTab = useCallback(
+    (t: Tab) => meta[t.key]?.conversationId ?? t.initialConversationId,
+    [meta],
   );
 
-  const switchConversation = useCallback(
-    async (id: number) => {
-      setConversationId(id);
-      await hydrate(id);
+  /** Open a conversation: focus its tab if already open, else open a new one. */
+  const openConversation = useCallback(
+    (id: number) => {
+      const existing = tabs.find((t) => convIdOfTab(t) === id);
+      if (existing) {
+        setActiveKey(existing.key);
+        return;
+      }
+      const key = nextKey();
+      setTabs((prev) => [...prev, { key, initialConversationId: id }]);
+      setActiveKey(key);
     },
-    [hydrate],
+    [tabs, convIdOfTab],
   );
+
+  /** Close a set of tabs, picking a sensible new active and never leaving zero. */
+  const closeTabs = useCallback(
+    (keys: string[]) => {
+      if (keys.length === 0) return;
+      const kill = new Set(keys);
+      setMeta((m) => {
+        const c = { ...m };
+        keys.forEach((k) => delete c[k]);
+        return c;
+      });
+      const next = tabs.filter((t) => !kill.has(t.key));
+      if (next.length === 0) {
+        const k = nextKey();
+        setTabs([{ key: k, initialConversationId: null }]);
+        setActiveKey(k);
+        return;
+      }
+      setTabs(next);
+      if (kill.has(activeKey)) {
+        const idx = tabs.findIndex((t) => t.key === activeKey);
+        const neighbor = next[Math.min(idx, next.length - 1)] ?? next[0];
+        setActiveKey(neighbor.key);
+      }
+    },
+    [tabs, activeKey],
+  );
+
+  const closeTab = useCallback((key: string) => closeTabs([key]), [closeTabs]);
 
   const removeConversation = useCallback(
     async (id: number) => {
       await deleteConversation(id);
-      if (id === conversationId) {
-        setConversationId(null);
-        resetChat();
-      }
+      const doomed = tabs.filter((t) => convIdOfTab(t) === id).map((t) => t.key);
+      closeTabs(doomed);
       await refreshConversations();
     },
-    [conversationId, resetChat, refreshConversations],
+    [tabs, convIdOfTab, closeTabs, refreshConversations],
   );
 
   const connect = useCallback(async () => {
     const url = serverUrl.trim();
     if (!url) {
-      setConnError("Enter an MCP server URL (e.g. http://localhost:3001/mcp).");
+      setConnectError("Enter an MCP server URL (e.g. http://localhost:3001/mcp).");
       return;
     }
     setConnecting(true);
-    setConnError(null);
+    setConnectError(null);
     try {
       const info = await connectToServer(new URL(url));
       setServer(info);
@@ -246,16 +248,16 @@ export default function App() {
       logEvent({ source: "user", type: "connect", data: { url, name: info.name, tools: info.tools.size } });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setConnError(msg);
+      setConnectError(msg);
       logEvent({ source: "user", type: "connect.error", data: { url, error: msg } });
     } finally {
       setConnecting(false);
     }
   }, [serverUrl]);
 
-  // Local debug bridge: lets an agent drive/inspect this app over HTTP. App owns
-  // connect/newchat; the chat-level actions come from useAgentChat. See
-  // src/lib/debug-bridge.ts and src-tauri/src/debug.rs.
+  // Local debug bridge: connect/newchat are app-level; chat actions dispatch to
+  // the focused tab's registered handlers. See src/lib/debug-bridge.ts.
+  const activeHandlers = () => bridgeRef.current.get(activeKeyRef.current);
   useDebugBridge({
     connect: async (url) => {
       const info = await connectToServer(new URL(url));
@@ -264,90 +266,38 @@ export default function App() {
       return { name: info.name, tools: [...info.tools.keys()] };
     },
     newchat: async () => {
-      newChat();
+      newBlankTab();
       return { ok: true };
     },
-    openform: chat.openFormBridge,
-    send: chat.sendBridge,
-    submit: chat.submitBridge,
-    cancel: chat.cancelBridge,
-    state: chat.bridgeState,
+    openform: async (spec) => (await activeHandlers()?.openform(spec)) ?? { error: "no active session" },
+    send: async (text) => (await activeHandlers()?.send(text)) ?? { error: "no active session" },
+    submit: async (values) => (await activeHandlers()?.submit(values)) ?? { error: "no active session" },
+    cancel: async () => (await activeHandlers()?.cancel()) ?? { error: "no active session" },
+    state: async () => (await activeHandlers()?.state()) ?? { error: "no active session" },
   });
 
   const toolCount = server ? server.tools.size : 0;
+  const activeConvId = useMemo(() => {
+    const t = tabs.find((x) => x.key === activeKey);
+    return t ? convIdOfTab(t) : null;
+  }, [tabs, activeKey, convIdOfTab]);
 
-  // Per-role rendering for Bubble.List. Stable reference (the skill warns inline
-  // role objects reset typing/animation). Assistant content goes through
-  // XMarkdown (streaming-safe); user stays plain text; tool/queued reuse the
-  // existing card markup until Phases 3/2 upgrade them.
-  const roles = useMemo(
-    () => ({
-      user: {
-        placement: "end" as const,
-        // Distinct accent bubble (white text) so user turns read apart from the
-        // assistant's neutral filled bubble — in both light and dark mode.
-        styles: { content: { background: "var(--user-bubble-bg)", color: "var(--user-bubble-text)" } },
-        contentRender: (content: unknown) => (
-          <div className="bubble-user-text">{String(content ?? "")}</div>
-        ),
-      },
-      assistant: {
-        placement: "start" as const,
-        // Themed, streaming-animated markdown with code cards (AssistantMarkdown
-        // owns the theme class + dark code theme). `status === "loading"` marks
-        // the actively-streaming bubble.
-        contentRender: (content: unknown, info: { status?: string }) => (
-          <AssistantMarkdown content={String(content ?? "")} live={info?.status === "loading"} />
-        ),
-      },
-      tool: {
-        placement: "start" as const,
-        variant: "borderless" as const,
-        contentRender: (content: unknown) => <ToolStep item={content as ToolItem} />,
-      },
-      queued: {
-        placement: "end" as const,
-        variant: "borderless" as const,
-        contentRender: (content: unknown) => {
-          const q = content as { text: string; index: number };
-          return (
-            <div className="bubble queued">
-              <span className="queued-text">{q.text}</span>
-              <span className="queued-tag">queued</span>
-              <button
-                className="queued-remove"
-                title="Remove from queue"
-                onClick={() => setQueued((qs) => qs.filter((_, j) => j !== q.index))}
-              >
-                ✕
-              </button>
-            </div>
-          );
-        },
-      },
-    }),
-    [],
+  // Tab labels: a code tab shows its folder name; a plain chat its title.
+  const tabInfos = useMemo<TabInfo[]>(
+    () =>
+      tabs.map((t) => {
+        const m = meta[t.key];
+        const convId = m?.conversationId ?? t.initialConversationId;
+        const wd = m?.workingDir ?? t.initialWorkingDir ?? null;
+        const label = wd
+          ? folderName(wd)
+          : convId != null
+            ? conversations.find((c) => c.id === convId)?.title || `Chat ${convId}`
+            : "New chat";
+        return { key: t.key, label, code: !!wd, busy: !!m?.busy };
+      }),
+    [tabs, meta, conversations],
   );
-
-  // The transcript (messages + queued) mapped to Bubble.List items. The last
-  // assistant bubble streams while busy (skeleton until the first delta lands).
-  const bubbleItems = useMemo(() => {
-    const items = messages.map((m, i) => {
-      if (m.kind === "tool") return { key: `m${i}`, role: "tool", content: m };
-      const streaming = m.role === "assistant" && i === messages.length - 1 && busy;
-      return {
-        key: `m${i}`,
-        role: m.role,
-        content: m.content,
-        streaming,
-        loading: streaming && !m.content,
-      };
-    });
-    queued.forEach((text, index) =>
-      items.push({ key: `q${index}`, role: "queued", content: { text, index } } as never),
-    );
-    return items as ComponentProps<typeof Bubble.List>["items"];
-  }, [messages, queued, busy]);
 
   return (
     <div className="layout">
@@ -368,16 +318,16 @@ export default function App() {
           {railSection === "history" && (
             <HistoryPanel
               conversations={conversations}
-              activeId={conversationId}
-              onSelect={switchConversation}
+              activeId={activeConvId}
+              onSelect={openConversation}
               onDelete={removeConversation}
             />
           )}
           {railSection === "projects" && (
             <ProjectsPanel
               conversations={conversations}
-              activeId={conversationId}
-              onSelect={switchConversation}
+              activeId={activeConvId}
+              onSelect={openConversation}
               onDelete={removeConversation}
               onNewInProject={newChatInProject}
             />
@@ -398,83 +348,49 @@ export default function App() {
               connecting={connecting}
               serverName={server?.name ?? null}
               toolCount={toolCount}
+              connectError={connectError}
             />
           )}
         </aside>
       )}
 
-      <main className="chat-pane">
+      <main className="workspace">
         <header className="chat-header">
           <h1>Omni Desktop</h1>
           <div className="header-actions">
-            <CodeModeToggle
-              codeMode={codeMode}
-              workingDir={workingDir}
-              onCodeModeChange={setCodeMode}
-              onWorkingDirChange={setWorkingDir}
-            />
-            <button className="new-chat-btn" onClick={newChat}>
+            <button className="new-chat-btn" onClick={newBlankTab}>
               <PlusOutlined /> New chat
             </button>
           </div>
         </header>
 
-        {connError && <div className="error-banner">{connError}</div>}
+        <TabBar
+          tabs={tabInfos}
+          activeKey={activeKey}
+          onSelect={setActiveKey}
+          onClose={closeTab}
+          onAdd={newBlankTab}
+        />
 
-        <section className="messages">
-          {bubbleItems && bubbleItems.length > 0 ? (
-            <Bubble.List
-              items={bubbleItems}
-              role={roles}
-              autoScroll
-              style={{ height: "100%" }}
+        <div className="sessions">
+          {tabs.map((t) => (
+            <ChatSession
+              key={t.key}
+              tabKey={t.key}
+              active={t.key === activeKey}
+              apiKey={apiKey}
+              model={model}
+              onModelChange={onModelChange}
+              server={server}
+              onConversationsChanged={refreshConversations}
+              initialConversationId={t.initialConversationId}
+              initialWorkingDir={t.initialWorkingDir}
+              onMeta={handleMeta}
+              registerBridge={registerBridge}
             />
-          ) : (
-            <ChatWelcome onPick={submit} />
-          )}
-        </section>
-
-        <section className="composer">
-          <Sender
-            value={input}
-            onChange={setInput}
-            onSubmit={submit}
-            loading={busy}
-            onCancel={cancelTurn}
-            // While loading, Sender suppresses its own Enter-submit (the button
-            // is "cancel"). Intercept Enter so a message typed mid-turn still
-            // queues, matching the form-open queue path (which goes via onSubmit).
-            onKeyDown={(e) => {
-              if (busy && e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void submit(input);
-                return false;
-              }
-            }}
-            autoSize={{ minRows: 1, maxRows: 6 }}
-            placeholder={
-              !server
-                ? "Connect a server in Settings to start"
-                : busy
-                  ? "Agent is working — Enter queues, ✕ cancels"
-                  : formPending
-                    ? "Form open — your message will queue (Enter)"
-                    : codeMode
-                      ? "Ask Omni to write code, refactor, or debug…"
-                      : "Message… (Enter to send)"
-            }
-          />
-          <div className="composer-footer">
-            <ModelPicker value={model} onChange={onModelChange} />
-          </div>
-        </section>
+          ))}
+        </div>
       </main>
-
-      <AppPane
-        activation={activation}
-        onClose={onPaneClose}
-        onContextUpdate={onAppContext}
-      />
     </div>
   );
 }

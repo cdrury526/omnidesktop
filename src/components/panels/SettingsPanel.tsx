@@ -20,6 +20,7 @@ interface Props {
   connecting: boolean;
   serverName: string | null;
   toolCount: number;
+  connectError: string | null;
 }
 
 export function SettingsPanel({
@@ -34,6 +35,7 @@ export function SettingsPanel({
   connecting,
   serverName,
   toolCount,
+  connectError,
 }: Props) {
   return (
     <div className="panel-body settings-panel">
@@ -81,6 +83,7 @@ export function SettingsPanel({
             {toolCount === 1 ? "" : "s"}
           </span>
         )}
+        {connectError && <span className="settings-error">{connectError}</span>}
       </label>
     </div>
   );
