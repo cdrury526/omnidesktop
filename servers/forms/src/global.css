@@ -17,6 +17,10 @@
 
 * { box-sizing: border-box; }
 
+html, body, #root {
+  height: 100%;
+}
+
 html, body {
   margin: 0;
   font-family: var(--font-sans);
@@ -25,12 +29,15 @@ html, body {
   font-size: 14px;
 }
 
+/* Fill the panel: header on top, fields scroll, footer pinned at the bottom. */
 .formapp {
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-md);
 }
+.formapp > header { flex: 0 0 auto; }
 
 .formapp header h3 { margin: 0 0 0.25rem; }
 .formapp .lede { margin: 0; color: var(--color-text-secondary); }
@@ -40,7 +47,13 @@ html, body {
   color: var(--color-text-secondary);
 }
 
-.fields { display: flex; flex-direction: column; gap: var(--spacing-md); }
+.fields {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
 
 .field { display: flex; flex-direction: column; gap: 0.3rem; }
 .field > label { font-weight: 600; }
@@ -88,7 +101,14 @@ textarea { resize: vertical; }
   color: var(--color-text-secondary);
 }
 
-footer { display: flex; justify-content: flex-end; gap: var(--spacing-sm); }
+footer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
 
 button {
   padding: 0.5rem 1rem;

@@ -33,3 +33,6 @@ ext-apps/
 *.db
 *.db-shm
 *.db-wal
+
+# Debug-bridge UI snapshots (dev tooling)
+snapshots/

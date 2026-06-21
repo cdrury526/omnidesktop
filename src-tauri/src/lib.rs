@@ -1,4 +1,5 @@
 mod db;
+mod debug;
 
 use tauri::Manager;
 
@@ -66,6 +67,11 @@ pub fn run() {
             let db = tauri::async_runtime::block_on(db::init(db_path))
                 .expect("failed to initialize database");
             app.manage(db);
+
+            // Local debug bridge (dev tool): an HTTP server an agent can drive
+            // to introspect and iterate on the UI. See src/debug.rs.
+            app.manage(debug::DebugStore::default());
+            debug::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -74,7 +80,9 @@ pub fn run() {
             get_api_key,
             delete_api_key,
             db::db_execute,
-            db::db_select
+            db::db_select,
+            debug::complete_debug_request,
+            debug::save_snapshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

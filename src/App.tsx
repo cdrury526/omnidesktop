@@ -16,6 +16,7 @@ import {
   type DisplayItem,
 } from "./agent/runner";
 import { isFormSubmit, validateResult, type FormSpec } from "@omni/forms-dsl";
+import { useDebugBridge } from "./lib/debug-bridge";
 import { ModelPicker } from "./components/ModelPicker";
 import { AppPane } from "./components/AppPane";
 import { getApiKey, saveApiKey, deleteApiKey, keyringAvailable } from "./lib/secrets";
@@ -214,70 +215,81 @@ export default function App() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, []);
 
+  const setAssistantError = useCallback((msg: string) => {
+    setMessages((m) => {
+      const next = m.slice();
+      const last = next[next.length - 1];
+      if (last?.kind === "msg" && last.role === "assistant" && !last.content) {
+        next[next.length - 1] = { ...last, content: `⚠️ ${msg}` };
+      }
+      return next;
+    });
+  }, []);
+
+  /** Run one user turn for `text`. Returns the conversation id it ran against. */
+  const runUserTurn = useCallback(
+    async (text: string): Promise<number | null> => {
+      if (!text || busy) return null;
+      if (!apiKey) { setConnError("Enter your OpenRouter API key first."); return null; }
+      if (!model) { setConnError("Pick a model first."); return null; }
+      setConnError(null);
+
+      let convId = conversationId;
+      if (convId == null) {
+        convId = await createConversation(text.slice(0, 60));
+        setConversationId(convId);
+      }
+
+      setMessages((m) => [
+        ...m,
+        { kind: "msg", role: "user", content: text },
+        { kind: "msg", role: "assistant", content: "" },
+      ]);
+      setBusy(true);
+
+      const tools = server ? buildMcpTools(server, setActivation) : [];
+      const state = conversationStateAccessor(convId);
+      try {
+        await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant });
+        // Reconcile with persisted state (surfaces tool cards). The panel, if a
+        // form paused, was already opened by onAutoSummon mid-turn.
+        setMessages(displayItemsFromState(await getConversationState(convId)));
+      } catch (e) {
+        setAssistantError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+        await touchConversation(convId);
+        void refreshConversations();
+      }
+      return convId;
+    },
+    [busy, apiKey, model, conversationId, server, appendDeltaToLastAssistant, setAssistantError, refreshConversations],
+  );
+
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || busy) return;
-    if (!apiKey) return setConnError("Enter your OpenRouter API key first.");
-    if (!model) return setConnError("Pick a model first.");
-    setConnError(null);
-
-    let convId = conversationId;
-    if (convId == null) {
-      convId = await createConversation(text.slice(0, 60));
-      setConversationId(convId);
-    }
-
-    setMessages((m) => [
-      ...m,
-      { kind: "msg", role: "user", content: text },
-      { kind: "msg", role: "assistant", content: "" },
-    ]);
+    if (!text) return;
     setInput("");
-    setBusy(true);
-
-    const tools = server ? buildMcpTools(server, setActivation) : [];
-    const state = conversationStateAccessor(convId);
-
-    try {
-      await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant });
-      // Reconcile the transcript with persisted state (surfaces tool cards). The
-      // panel, if a form paused, was already opened by onAutoSummon mid-turn.
-      setMessages(displayItemsFromState(await getConversationState(convId)));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setMessages((m) => {
-        const next = m.slice();
-        const last = next[next.length - 1];
-        if (last?.kind === "msg" && last.role === "assistant" && !last.content) {
-          next[next.length - 1] = { ...last, content: `⚠️ ${msg}` };
-        }
-        return next;
-      });
-    } finally {
-      setBusy(false);
-      await touchConversation(convId);
-      void refreshConversations();
-    }
-  }, [input, busy, apiKey, model, server, conversationId, appendDeltaToLastAssistant, hydrate, refreshConversations]);
+    await runUserTurn(text);
+  }, [input, runUserTurn]);
 
   /**
-   * The form app pushes the user's submission here (via `updateModelContext`).
-   * We validate it host-side (the iframe is untrusted), resolve the paused HITL
-   * call with the cleaned values, and let the SDK resume the conversation.
+   * Resolve the pending HITL form with `values`: validate host-side (the iframe
+   * is untrusted), feed the cleaned result back to the paused tool call, and let
+   * the SDK resume. Returns the conversation id it resolved against. Used both
+   * by the live submit channel and the debug bridge.
    */
-  const onAppContext = useCallback(
-    async (ctx: ModelContext | null) => {
-      const sc = ctx?.structuredContent;
-      if (!isFormSubmit(sc) || busy) return;
+  const resolvePendingForm = useCallback(
+    async (values: Record<string, unknown>): Promise<number | null> => {
       const convId = conversationId;
-      if (convId == null) return;
+      if (convId == null || busy) return null;
 
       const state = await getConversationState(convId);
       const pending = pendingHitlCall(state);
-      if (!pending) return;
+      if (!pending) return null;
 
       const spec = pending.args as unknown as FormSpec;
-      const check = validateResult(spec, sc.values);
+      const check = validateResult(spec, values);
       const output = check.ok ? check.cleaned : { error: "invalid_result", issues: check.issues };
 
       void logFormEvent({
@@ -286,7 +298,7 @@ export default function App() {
         spec,
         specValid: true,
         issues: check.ok ? undefined : check.issues,
-        result: sc.values,
+        result: values,
         status: "submitted",
       });
 
@@ -297,34 +309,53 @@ export default function App() {
       const accessor = conversationStateAccessor(convId);
       const tools = server ? buildMcpTools(server, setActivation) : [];
       try {
-        await resumeTurn({
-          apiKey,
-          model,
-          callId: pending.callId,
-          output,
-          state: accessor,
-          tools,
-          onTextDelta: appendDeltaToLastAssistant,
-        });
+        await resumeTurn({ apiKey, model, callId: pending.callId, output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
         setMessages(displayItemsFromState(await getConversationState(convId)));
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setMessages((m) => {
-          const next = m.slice();
-          const last = next[next.length - 1];
-          if (last?.kind === "msg" && last.role === "assistant" && !last.content) {
-            next[next.length - 1] = { ...last, content: `⚠️ ${msg}` };
-          }
-          return next;
-        });
+        setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(false);
         await touchConversation(convId);
         void refreshConversations();
       }
+      return convId;
     },
-    [busy, conversationId, server, apiKey, model, appendDeltaToLastAssistant, hydrate, refreshConversations],
+    [conversationId, busy, server, apiKey, model, appendDeltaToLastAssistant, setAssistantError, refreshConversations],
   );
+
+  // The form app pushes its submission here (via `updateModelContext`).
+  const onAppContext = useCallback(
+    async (ctx: ModelContext | null) => {
+      const sc = ctx?.structuredContent;
+      if (isFormSubmit(sc)) await resolvePendingForm(sc.values as Record<string, unknown>);
+    },
+    [resolvePendingForm],
+  );
+
+  // Local debug bridge: lets an agent drive/inspect this app over HTTP. See
+  // src/lib/debug-bridge.ts and src-tauri/src/debug.rs.
+  useDebugBridge({
+    connect: async (url) => {
+      const info = await connectToServer(new URL(url));
+      setServer(info);
+      void setSetting("server_url", url);
+      return { name: info.name, tools: [...info.tools.keys()] };
+    },
+    send: async (text) => {
+      const convId = await runUserTurn(text);
+      const st = convId != null ? await getConversationState(convId) : null;
+      return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    },
+    submit: async (values) => {
+      const convId = await resolvePendingForm(values);
+      const st = convId != null ? await getConversationState(convId) : null;
+      return { resolved: convId != null, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    },
+    state: async () => {
+      const st = conversationId != null ? await getConversationState(conversationId) : null;
+      return { conversationId, busy, connected: !!server, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    },
+  });
 
   const toolCount = server ? server.tools.size : 0;
 

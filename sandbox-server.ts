@@ -42,7 +42,9 @@ async function bundleSandbox(): Promise<string> {
 const sandboxScriptPromise = bundleSandbox();
 
 function htmlShell(script: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>MCP App Sandbox</title></head><body><script type="module">${script}</script></body></html>`;
+  // height:100% on the document so the inner app iframe (also height:100%) can
+  // fill the host's outer iframe instead of collapsing to its content height.
+  return `<!doctype html><html><head><meta charset="utf-8"><title>MCP App Sandbox</title><style>html,body{height:100%;margin:0}</style></head><body><script type="module">${script}</script></body></html>`;
 }
 
 // ---- CSP header builder (mirrors the ext-apps basic-host reference) ----

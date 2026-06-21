@@ -42,7 +42,9 @@ try {
 // content. Per the specification, the Host and the Sandbox MUST have different
 // origins.
 const inner = document.createElement("iframe");
-inner.style = "width:100%; height:100%; border:none;";
+// display:block avoids the inline-iframe baseline gap; height:100% fills the
+// (now height:100%) sandbox document.
+inner.style = "width:100%; height:100%; border:none; display:block;";
 inner.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
 // Note: allow attribute is set later when receiving sandbox-resource-ready notification
 // based on the permissions requested by the app
