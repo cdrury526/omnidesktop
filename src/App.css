@@ -193,7 +193,7 @@ html, body, #root {
 }
 @keyframes tab-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
-/* ---- left icon rail ---- */
+/* ---- left icon rail (collapsed antd Menu) ---- */
 .side-rail {
   flex: 0 0 52px;
   display: flex;
@@ -204,32 +204,50 @@ html, body, #root {
   background: var(--bg-soft);
   border-right: 1px solid var(--border);
 }
-.rail-group { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-.side-rail .rail-item.ant-btn {
+.side-rail .side-rail-menu {
+  width: 52px !important;
+  background: transparent !important;
+  border: none !important;
+}
+.side-rail .side-rail-menu .ant-menu-item {
   width: 38px;
   height: 38px;
-  display: inline-flex;
+  line-height: 38px;
+  margin: 3px 7px !important;
+  padding: 0 !important;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  background: transparent;
-  border: none;
   border-radius: 9px;
   color: var(--muted);
-  font-size: 1.15rem;
-  box-shadow: none;
 }
-.side-rail .rail-item.ant-btn:hover:not(:disabled) {
+.side-rail .side-rail-menu .ant-menu-item .ant-menu-item-icon {
+  margin: 0 !important;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.side-rail .side-rail-menu .ant-menu-item .ant-menu-title-content {
+  display: none;
+}
+.side-rail .side-rail-menu .ant-menu-item:hover:not(.ant-menu-item-disabled) {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text);
 }
-.side-rail .rail-item.ant-btn.active {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+.side-rail .side-rail-menu .ant-menu-item-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent) !important;
   color: var(--accent);
 }
-.side-rail .rail-item.ant-btn.soon { opacity: 0.4; cursor: default; }
+.side-rail .side-rail-menu .ant-menu-item-disabled.soon {
+  opacity: 0.4;
+  cursor: default;
+}
 .side-rail .rail-badge-wrap .ant-badge-dot {
   background: light-dark(#f59e0b, #fbbf24);
+}
+.side-rail .rail-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---- rail panel (history / projects / settings) ---- */
@@ -341,6 +359,28 @@ html, body, #root {
 }
 
 /* ---- history / projects: Conversations items inherit X active styling ---- */
+.conversation-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.25;
+}
+.conversation-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+.conversation-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.panel-conversations .ant-conversations-label {
+  flex: 1;
+  min-width: 0;
+}
 .key-status { font-size: 0.75rem; color: var(--muted); }
 .key-status.stored { color: light-dark(#15803d, #4ade80); }
 .key-status.unsaved { color: light-dark(#a16207, #fbbf24); }

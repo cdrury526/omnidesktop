@@ -7,7 +7,7 @@
  * The rail is app chrome (it spans all sessions); the panels it opens are
  * rendered by App next to it.
  */
-import { Badge, Button, Tooltip } from "antd";
+import { Badge, Menu, type MenuProps } from "antd";
 import {
   HistoryOutlined,
   FolderOutlined,
@@ -53,40 +53,57 @@ interface Props {
   badges?: Partial<Record<RailSection, boolean>>;
 }
 
-export function SideRail({ active, onSelect, badges }: Props) {
-  const renderItem = (item: RailItem) => {
-    const button = (
-      <Button
-        type="text"
-        className={`rail-item ${active === item.key ? "active" : ""} ${item.soon ? "soon" : ""}`}
-        icon={item.icon}
-        onClick={() => !item.soon && onSelect(item.key)}
-        disabled={item.soon}
-        aria-label={item.label}
-      />
-    );
+function railIcon(icon: ReactNode, badge?: boolean) {
+  const node = <span className="rail-menu-icon">{icon}</span>;
+  return badge ? (
+    <Badge dot className="rail-badge-wrap">
+      {node}
+    </Badge>
+  ) : (
+    node
+  );
+}
 
-    return (
-      <Tooltip
-        key={item.key}
-        placement="right"
-        title={item.soon ? `${item.label} — coming soon` : item.label}
-      >
-        {badges?.[item.key] ? (
-          <Badge dot className="rail-badge-wrap">
-            {button}
-          </Badge>
-        ) : (
-          button
-        )}
-      </Tooltip>
-    );
-  };
+function toMenuItems(
+  items: RailItem[],
+  badges?: Partial<Record<RailSection, boolean>>,
+): MenuProps["items"] {
+  return items.map((item) => ({
+    key: item.key,
+    icon: railIcon(item.icon, badges?.[item.key]),
+    label: item.label,
+    title: item.soon ? `${item.label} — coming soon` : item.label,
+    disabled: item.soon,
+    className: item.soon ? "rail-menu-item soon" : "rail-menu-item",
+    "data-rail-section": item.key,
+    "aria-label": item.label,
+  }));
+}
+
+export function SideRail({ active, onSelect, badges }: Props) {
+  const selectedKeys = active ? [active] : [];
+  const onClick: MenuProps["onClick"] = ({ key }) => onSelect(key as RailSection);
 
   return (
-    <nav className="side-rail">
-      <div className="rail-group">{TOP_ITEMS.map(renderItem)}</div>
-      <div className="rail-group rail-bottom">{BOTTOM_ITEMS.map(renderItem)}</div>
+    <nav className="side-rail" aria-label="Main navigation">
+      <Menu
+        className="side-rail-menu"
+        mode="inline"
+        inlineCollapsed
+        selectable
+        selectedKeys={selectedKeys}
+        items={toMenuItems(TOP_ITEMS, badges)}
+        onClick={onClick}
+      />
+      <Menu
+        className="side-rail-menu side-rail-menu-bottom"
+        mode="inline"
+        inlineCollapsed
+        selectable
+        selectedKeys={selectedKeys}
+        items={toMenuItems(BOTTOM_ITEMS, badges)}
+        onClick={onClick}
+      />
     </nav>
   );
 }
