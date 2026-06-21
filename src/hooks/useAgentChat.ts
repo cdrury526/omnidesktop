@@ -27,6 +27,7 @@ import {
   displayItemsFromState,
   pendingHitlCall,
   toolCardsFromState,
+  toolResultDetail,
   LeakedToolCallError,
   type DisplayItem,
 } from "../agent/runner";
@@ -153,7 +154,15 @@ export function useAgentChat({
         logEvent({ source: "system", type: "tool.call", conversationId: convId, data: { callId: card.callId, name: card.name } });
       }
       if (card.status !== "pending" && prev !== card.status) {
-        logEvent({ source: "system", type: "tool.result", conversationId: convId, data: { callId: card.callId, name: card.name, status: card.status } });
+        // Attach a truncated error/cancel detail so failures are diagnosable
+        // from the event log alone (done results can be large — skip those).
+        const detail = card.status === "done" ? undefined : toolResultDetail(card.result);
+        logEvent({
+          source: "system",
+          type: "tool.result",
+          conversationId: convId,
+          data: { callId: card.callId, name: card.name, status: card.status, ...(detail ? { detail } : {}) },
+        });
       }
       toolSeenRef.current.set(card.callId, card.status);
     }

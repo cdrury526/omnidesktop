@@ -93,10 +93,48 @@ export function buildMcpTools(
  * item in `ConversationState`. (Reliable: read from persisted state, not the
  * SDK execute context, which isn't populated for HITL tools.)
  */
-export function toolCardsFromState(state: unknown): Array<{ callId: string; name: string; status: string }> {
+export function toolCardsFromState(
+  state: unknown,
+): Array<{ callId: string; name: string; status: string; result?: string }> {
   return displayItemsFromState(state)
     .filter((i): i is Extract<DisplayItem, { kind: "tool" }> => i.kind === "tool")
-    .map(({ callId, name, status }) => ({ callId, name, status }));
+    .map(({ callId, name, status, result }) => ({ callId, name, status, result }));
+}
+
+/** Max length of the diagnostic detail attached to a tool.result event. */
+const TOOL_DETAIL_MAX = 300;
+
+/**
+ * A concise, truncated summary of a resolved tool's output — attached to the
+ * `tool.result` event so a failure is diagnosable from the event log alone,
+ * without joining back to `conversation_state` by callId. Pulls `error` /
+ * `reason` / `issues` out of structured outputs; falls back to the raw text.
+ */
+export function toolResultDetail(result: string | undefined): string | undefined {
+  if (!result) return undefined;
+  let msg = result;
+  try {
+    const o = JSON.parse(result) as Record<string, unknown>;
+    if (o && typeof o === "object") {
+      const parts: string[] = [];
+      if (o.error != null) parts.push(`error: ${String(o.error)}`);
+      if (o.reason != null) parts.push(`reason: ${String(o.reason)}`);
+      const issues = o.issues;
+      if (Array.isArray(issues) && issues.length) {
+        const summary = issues
+          .map((i) => {
+            const it = i as { message?: unknown; path?: unknown };
+            return it?.message ?? it?.path ?? JSON.stringify(i);
+          })
+          .join("; ");
+        parts.push(`issues: ${summary}`);
+      }
+      if (parts.length) msg = parts.join(" | ");
+    }
+  } catch {
+    // Not JSON (e.g. a plain tool text result) — use it as-is.
+  }
+  return msg.length > TOOL_DETAIL_MAX ? `${msg.slice(0, TOOL_DETAIL_MAX)}…` : msg;
 }
 
 const SYSTEM_PROMPT =
