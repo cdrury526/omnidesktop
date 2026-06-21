@@ -32,6 +32,15 @@ ext-apps/
 # Local Claude Code config (plugin enablement etc.) — machine-specific
 .claude/settings.json
 .claude/settings.local.json
+# Per-project Claude state (memory + transcripts) — machine-specific
+.claude/projects/
+
+# Secrets / machine-local tooling — never commit (see CLAUDE.md)
+.env
+.cursor/
+.firecrawl/
+google-cloud-sdk/
+tools/
 
 # Local database files (data lives in app data dir, but never commit any)
 *.db
