@@ -319,6 +319,24 @@ existing "Inline-panel embedding" backlog item.)
 
 ## Backlog
 
+- **Prefer antd / Ant Design X look — even when we can't use the full component
+  (user preference).** The `TabBar` (`src/components/TabBar.tsx`) is currently
+  **hand-rolled** divs + CSS (only `@ant-design/icons` from the Ant family). The
+  user wants the antd/X visual language preserved across the app, and — key
+  insight — we can usually still *use* the antd primitive even when its built-in
+  behavior doesn't fit, by opting out of the parts we don't want rather than
+  reimplementing. For the tabs specifically: use antd `<Tabs type="editable-card">`
+  purely as a **tab strip** — pass `items` with `key`/`label`/`icon` and **no
+  `children`**, drive it via `activeKey` + `onChange` (select) and `onEdit`
+  (close/add), and render the always-mounted `ChatSession`s **separately** below
+  it (hide Tabs' own empty content area). That keeps "tabs = navigation, sessions
+  render themselves" while inheriting antd's tokens, keyboard nav, overflow
+  dropdown, and theming. Only real cost: CSS/token overrides to get the flat
+  Stitch tab + 2px indigo underline (editable-card is rounded by default). Apply
+  the same "use the antd component as a shell, opt out of the behavior we don't
+  want" approach elsewhere before hand-rolling. (Ant Design X has no horizontal
+  tab component — `Conversations` is a vertical list — so antd core `Tabs` is the
+  primitive here.)
 - **Streaming smoothness (optional polish)** — streaming works (see correction
   up top); deltas arrive in bursts, so the bubble grows in chunks rather than
   per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
