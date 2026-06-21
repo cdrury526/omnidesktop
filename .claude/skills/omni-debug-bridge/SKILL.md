@@ -107,7 +107,13 @@ curl -sS -X POST http://127.0.0.1:1456/forminput -H 'content-type: application/j
 curl -sS -X POST http://127.0.0.1:1456/formclick -H 'content-type: application/json' \
   -d '{"target":"submit"}'    # submit | cancel | next | back
 
-# computed box + layout styles of HOST elements (the key tool for layout bugs)
+# computed box + layout styles of HOST elements (the key tool for layout bugs).
+# Each matched node also returns `text` (visible innerText, truncated) and
+# `styles.color` / `styles.backgroundColor` (resolved rgb) — use these to verify
+# content actually rendered and to check theme/contrast PROGRAMMATICALLY. This is
+# the reliable source of truth, NOT the snapshot (html2canvas drops
+# variable-driven text/colors → false negatives).
+curl -sS 'http://127.0.0.1:1456/dom?selector=.ant-bubble-content'
 curl -sS 'http://127.0.0.1:1456/dom?selector=.app-pane-surface%20iframe'
 
 # the FORM iframe's self-reported interior layout (it is cross-origin; /dom
@@ -119,8 +125,10 @@ curl -sS http://127.0.0.1:1456/formdom
 # actions from debug-bridge pokes from agent machinery (queue/repair/system).
 curl -sS 'http://127.0.0.1:1456/events?limit=50'   # newest first; ?since=<id> to tail
 
-# html2canvas PNG of the host UI -> snapshots/ (note: the cross-origin form
-# iframe renders BLANK in snapshots — use /dom and /formdom for form layout)
+# html2canvas PNG of the host UI -> snapshots/. CAVEAT: html2canvas re-rasterizes
+# the DOM and DROPS variable-driven text/colors and the cross-origin form iframe
+# (renders blank). Good for rough layout/gestalt only — for "did the text render?"
+# and "what color is it?", trust /dom (text + styles.color), never the snapshot.
 curl -sS http://127.0.0.1:1456/snapshot
 ```
 

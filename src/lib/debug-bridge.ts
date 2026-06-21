@@ -42,6 +42,9 @@ const STYLE_PROPS = [
   "width", "height", "minHeight", "maxHeight",
   "flex", "flexBasis", "flexGrow", "flexShrink", "flexDirection",
   "overflow", "overflowY", "padding", "margin",
+  // Colors (resolved to rgb) so callers can check theme/contrast directly
+  // instead of eyeballing a snapshot — html2canvas drops variable-driven text.
+  "color", "backgroundColor",
 ] as const;
 
 function inspectDom(selector: string) {
@@ -55,10 +58,15 @@ function inspectDom(selector: string) {
       const cs = getComputedStyle(el);
       const styles: Record<string, string> = {};
       for (const p of STYLE_PROPS) styles[p] = cs.getPropertyValue(p) || String((cs as never)[p as never] ?? "");
+      // Visible text (innerText respects display/visibility; textContent is the
+      // fallback when layout hasn't computed innerText). The reliable way to
+      // confirm content actually rendered — don't trust the html2canvas snapshot.
+      const text = (el.innerText || el.textContent || "").trim();
       return {
         tag: el.tagName.toLowerCase(),
         id: el.id || undefined,
         class: el.getAttribute("class") || undefined,
+        text: text ? text.slice(0, 300) : undefined,
         rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
         box: { clientH: el.clientHeight, scrollH: el.scrollHeight, offsetH: el.offsetHeight, clientW: el.clientWidth },
         styles,
