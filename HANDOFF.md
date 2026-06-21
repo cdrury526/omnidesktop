@@ -14,17 +14,40 @@ Status: **working end-to-end and pushed to GitHub** (`cdrury526/omnidesktop`).
 Verified live: model picker, keyring, MCP connect, agent tool-calling,
 interactive forms (HITL) with durable pause/resume, message queuing, cancel.
 
-## ▶ NEXT TASK — `CODE_MODE_BRIEF.md` (chat → coding app)
+## ▶ NEXT TASK — filesystem tools (Code mode, phase 2)
 
-The next body of work is the **first leap from chat app to coding app**: a
-per-chat **Code Mode** toggle + **working-folder** picker, persisted per
-conversation and injected into the agent's prompt. See **`CODE_MODE_BRIEF.md`** —
-a discussion brief (not a finalized plan) covering scope (and what's deferred),
-the destination from the Stitch renders in `stitch-renders/`, codebase
-touchpoints (migration `0002`, Tauri dialog plugin, runner prompt injection,
-header toggle), the **filesystem-tools architecture** for the phase after
-(agent tools → Rust commands, path-scoped + HITL-approved), open decisions, and
-a concrete first slice. Start there; it's meant to be discussed/refined first.
+The **Code mode first slice is DONE** (commit `0cdeeea`): a per-chat Code mode
+toggle + native working-folder picker, persisted per conversation and injected
+into the agent's system prompt. The next body of work is the **filesystem-tools
+architecture** — the "tools piece" — detailed in **`CODE_MODE_BRIEF.md`**
+("Next phase" section): `buildCodeTools(workingDir)` agent tools whose
+`execute()` calls Rust commands (`fs_read`/`list_dir`/`write_file`/
+`run_command`), with the **load-bearing path-scoping check in Rust**
+(canonicalize, reject anything outside `working_dir`) and **HITL approval**
+(reuse the durable form pause/resume) gating writes/exec. Read that section
+first.
+
+### What the first slice landed (commit `0cdeeea`)
+- Migration `0002` — `code_mode` + `working_dir` columns on `conversations`
+  (the first real `ALTER` through the migration framework).
+- `@tauri-apps/plugin-dialog` (+ `dialog:allow-open` capability, plugin init in
+  `lib.rs`) for the native directory picker (`src/lib/dialog.ts`).
+- `getCodeMode`/`setCodeMode` in `src/lib/db.ts`; `useAgentChat` holds the
+  `codeMode`/`workingDir` state, loads it in `hydrate`, persists on
+  toggle/change and on new-chat creation. **New chats default to off.**
+- `runner.ts` `instructionsFor(workingDir)` appends a Code-mode prompt section
+  (explicitly honest that there are NO file tools yet); threaded through
+  `runTurn`/`resumeTurn`/`repairToolCall`.
+- `src/components/CodeModeToggle.tsx` — header Chat/Code switch + folder chip
+  (name shown, full path on hover, change/clear).
+- Decisions made (sensible defaults from the brief): per-conversation scope;
+  mid-chat toggling/folder-change allowed (affects subsequent turns); columns
+  on `conversations` (not a side table); prompt carries just the path. Deferred:
+  missing-folder-on-load detection/warning.
+- Verified live via the bridge: migration applied (`user_version=2`); seeded a
+  `working_dir`, switched via the history UI (`hydrate` restored mode + chip),
+  and the model correctly reported the folder when asked. Native picker itself
+  can't be driven headlessly (OS dialog), so that one click is unverified.
 
 ## DONE — Ant Design X adoption (merged to `main`)
 
