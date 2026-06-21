@@ -171,6 +171,11 @@ button:disabled { opacity: 0.55; cursor: default; }
   padding: 24px 8px;
 }
 
+/* Inset the code block from the card's left/right (and bottom) so its dark
+   background doesn't bleed into the card's rounded corners. The container ships
+   with padding:0; this is the gutter between the card edge and the code block. */
+.md-code-card .ant-codeHighlighter-code { padding: 0 12px 12px; }
+
 /* Tool-call steps in the transcript (ThoughtChain). */
 .tool-chain { width: 100%; }
 .tool-detail {

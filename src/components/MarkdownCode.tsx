@@ -45,9 +45,9 @@ function Code({ block, lang, className, children }: CodeProps) {
       className="md-code-card"
       highlightProps={{
         style: theme === "dark" ? oneDark : oneLight,
-        // The Prism theme's inline padding is tight against the card edges;
-        // give the code body more horizontal breathing room.
-        customStyle: { margin: 0, padding: "14px 18px" },
+        // Round the block + comfortable text padding. The left/right inset from
+        // the card edge comes from .ant-codeHighlighter-code padding (App.css).
+        customStyle: { margin: 0, padding: "12px 14px", borderRadius: 8 },
       }}
     >
       {textOf(children)}
