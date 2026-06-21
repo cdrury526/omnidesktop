@@ -16,6 +16,7 @@ import {
   describedButDidntCall,
   displayItemsFromState,
   pendingHitlCall,
+  toolCardsFromState,
   type DisplayItem,
 } from "./agent/runner";
 import { isFormSubmit, isFormCancel, readFormDirty, validateResult, type FormSpec } from "@omni/forms-dsl";
@@ -138,6 +139,30 @@ export default function App() {
     setActivation(info);
   }, []);
 
+  // Last-seen status per tool callId, so we emit tool.call once and tool.result
+  // on the pending→resolved transition. Tool args/results live in
+  // conversation_state; the event just references them by callId.
+  const toolSeenRef = useRef<Map<string, string>>(new Map());
+
+  /** Emit tool.call / tool.result events for new or newly-resolved tool calls. */
+  const emitToolEvents = useCallback((convId: number, state: unknown) => {
+    for (const card of toolCardsFromState(state)) {
+      const prev = toolSeenRef.current.get(card.callId);
+      if (prev === undefined) {
+        logEvent({ source: "system", type: "tool.call", conversationId: convId, data: { callId: card.callId, name: card.name } });
+      }
+      if (card.status !== "pending" && prev !== card.status) {
+        logEvent({ source: "system", type: "tool.result", conversationId: convId, data: { callId: card.callId, name: card.name, status: card.status } });
+      }
+      toolSeenRef.current.set(card.callId, card.status);
+    }
+  }, []);
+
+  /** Seed seen-cards without logging (when loading an existing conversation). */
+  const seedToolSeen = useCallback((state: unknown) => {
+    for (const card of toolCardsFromState(state)) toolSeenRef.current.set(card.callId, card.status);
+  }, []);
+
   const refreshConversations = useCallback(async () => {
     setConversations(await listConversations());
   }, []);
@@ -152,6 +177,7 @@ export default function App() {
     const state = await getConversationState(id);
     if (state) {
       setMessages(displayItemsFromState(state));
+      seedToolSeen(state); // existing tool calls are "seen" — don't re-log history
       const pending = pendingHitlCall(state);
       setFormPending(!!pending);
       const srv = serverRef.current;
@@ -168,7 +194,7 @@ export default function App() {
     setMessages(rows.map((r) => ({ kind: "msg", role: r.role as "user" | "assistant", content: r.content })));
     setFormPending(false);
     setActivation(null);
-  }, [summonPanel]);
+  }, [summonPanel, seedToolSeen]);
 
   // Restore the most recent conversation on mount.
   useEffect(() => {
@@ -188,6 +214,7 @@ export default function App() {
     setQueued([]);
     setFormPending(false);
     setActivation(null);
+    toolSeenRef.current.clear();
     formDirtyRef.current = false;
     setConnError(null);
     setHistoryOpen(false);
@@ -302,6 +329,7 @@ export default function App() {
         // Reconcile with persisted state (surfaces tool cards). The panel, if a
         // form paused, was already opened by onAutoSummon mid-turn.
         applyState(st);
+        emitToolEvents(convId, st);
         logEvent({ source, type: "turn.end", conversationId: convId, data: { ms: Math.round(performance.now() - startedAt), formOpened: !!pendingHitlCall(st) } });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -371,7 +399,9 @@ export default function App() {
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       try {
         await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
-        applyState(await getConversationState(convId));
+        const st = await getConversationState(convId);
+        applyState(st);
+        emitToolEvents(convId, st);
       } catch (e) {
         setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -468,7 +498,9 @@ export default function App() {
       const tools = buildMcpTools(server, summonPanel);
       try {
         await openForm({ apiKey, model, spec, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
-        applyState(await getConversationState(convId));
+        const st = await getConversationState(convId);
+        applyState(st);
+        emitToolEvents(convId, st);
       } catch (e) {
         setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {

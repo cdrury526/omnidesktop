@@ -87,6 +87,18 @@ export function buildMcpTools(
   });
 }
 
+/**
+ * The tool cards in a persisted state, each carrying the SDK `callId` — used to
+ * emit tool.call/tool.result events that reference the exact `function_call`
+ * item in `ConversationState`. (Reliable: read from persisted state, not the
+ * SDK execute context, which isn't populated for HITL tools.)
+ */
+export function toolCardsFromState(state: unknown): Array<{ callId: string; name: string; status: string }> {
+  return displayItemsFromState(state)
+    .filter((i): i is Extract<DisplayItem, { kind: "tool" }> => i.kind === "tool")
+    .map(({ callId, name, status }) => ({ callId, name, status }));
+}
+
 const SYSTEM_PROMPT =
   "You are a helpful desktop assistant running in a native app. You can call " +
   "tools provided by connected MCP servers. Some tools open an interactive UI " +
