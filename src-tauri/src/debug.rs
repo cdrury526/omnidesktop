@@ -7,9 +7,20 @@
 //! Endpoints (all JSON):
 //!   GET  /health                      -> liveness
 //!   POST /connect  {url}              -> connect to an MCP server
+//!   POST /newchat                      -> start a fresh conversation
 //!   POST /send     {text}             -> run a chat turn with `text`
 //!   POST /submit   {values}           -> resolve the pending HITL form
 //!   POST /cancel                       -> cancel the pending HITL form
+//!   POST /click    {selector}         -> synthetic click on a host element
+//!   POST /type     {selector,text}    -> set a host input's value (React-aware)
+//!   POST /press    {key,selector?}    -> synthetic keydown/keyup on the host
+//!   POST /forminput {id,value}        -> set a field inside the form iframe
+//!   POST /formclick {target}          -> click submit/cancel/next/back in the form
+//!   (the form app long-polls /form-poll and posts /form-ack; OMNI_DEBUG=1 only)
+//!
+//! Dev-only: started solely under `#[cfg(debug_assertions)]` (so a bundled
+//! release never exposes it), and the webview handlers are gated on
+//! `import.meta.env.DEV`.
 //!   GET  /state                       -> active conversation + pending call + items
 //!   GET  /dom?selector=CSS            -> computed box + styles of host elements
 //!   GET  /formdom                     -> the form iframe's self-reported layout
@@ -20,11 +31,11 @@
 //! `/dom` against the `<iframe>` / `.app-pane-surface` elements (the usual
 //! culprit), and use `/state` to read what the form would submit.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender};
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -40,6 +51,11 @@ const TIMEOUT: Duration = Duration::from_secs(45);
 #[derive(Default)]
 pub struct DebugStore {
     pending: Mutex<HashMap<String, SyncSender<Result<Value, String>>>>,
+    // Form-interior channel: commands the (cross-origin) form app long-polls for,
+    // and per-command ack senders so /forminput etc. block until the form applies.
+    form_queue: Mutex<VecDeque<Value>>,
+    form_cv: Condvar,
+    form_acks: Mutex<HashMap<String, SyncSender<Result<Value, String>>>>,
 }
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -143,6 +159,64 @@ fn wait(app: &tauri::AppHandle, action: &str, params: Value) -> Result<Value, St
     }
 }
 
+/// Enqueue a command for the form app and block until it acks (or times out).
+fn form_command(app: &tauri::AppHandle, action: &str, params: Value) -> Result<Value, String> {
+    let cmd_id = next_id();
+    let (tx, rx) = sync_channel::<Result<Value, String>>(1);
+    let store = app.state::<DebugStore>();
+    store
+        .form_acks
+        .lock()
+        .map_err(|_| "form acks poisoned".to_string())?
+        .insert(cmd_id.clone(), tx);
+    {
+        let mut q = store.form_queue.lock().map_err(|_| "form queue poisoned".to_string())?;
+        q.push_back(json!({ "cmdId": cmd_id, "action": action, "params": params }));
+    }
+    store.form_cv.notify_all();
+    match rx.recv_timeout(TIMEOUT) {
+        Ok(result) => result,
+        Err(_) => {
+            let _ = store.form_acks.lock().map(|mut a| a.remove(&cmd_id));
+            Err("form command timed out — is a form open with OMNI_DEBUG=1?".to_string())
+        }
+    }
+}
+
+/// Long-poll: block until a command is queued for the form (or ~25s timeout).
+fn form_poll(app: &tauri::AppHandle) -> Result<Value, String> {
+    let store = app.state::<DebugStore>();
+    let mut q = store.form_queue.lock().map_err(|_| "form queue poisoned".to_string())?;
+    loop {
+        if let Some(cmd) = q.pop_front() {
+            return Ok(cmd);
+        }
+        let (next, timeout) = store
+            .form_cv
+            .wait_timeout(q, Duration::from_secs(25))
+            .map_err(|_| "form queue poisoned".to_string())?;
+        q = next;
+        if timeout.timed_out() {
+            return Ok(json!({ "none": true }));
+        }
+    }
+}
+
+/// The form posts its result for a command here, unblocking `form_command`.
+fn form_ack(app: &tauri::AppHandle, body: Value) -> Result<Value, String> {
+    let cmd_id = body.get("cmdId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let store = app.state::<DebugStore>();
+    if let Some(tx) = store
+        .form_acks
+        .lock()
+        .map_err(|_| "form acks poisoned".to_string())?
+        .remove(&cmd_id)
+    {
+        let _ = tx.send(Ok(body.get("result").cloned().unwrap_or(json!({}))));
+    }
+    Ok(json!({ "ok": true }))
+}
+
 fn json_response(status: u16, body: Value) -> Response<std::io::Cursor<Vec<u8>>> {
     let mut response =
         Response::from_string(body.to_string()).with_status_code(StatusCode(status));
@@ -210,6 +284,54 @@ fn urldecode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+fn handle_request(mut request: tiny_http::Request, app: &tauri::AppHandle) {
+    let method = request.method().as_str().to_string();
+    let url = request.url().to_string();
+    let route = url.split('?').next().unwrap_or("").to_string();
+
+    if method == "OPTIONS" {
+        let _ = request.respond(json_response(204, json!({})));
+        return;
+    }
+    if method == "GET" && route == "/health" {
+        let _ = request.respond(json_response(200, json!({ "ok": true })));
+        return;
+    }
+
+    let outcome = match (method.as_str(), route.as_str()) {
+        ("POST", "/connect") => wait(app, "connect", read_body(&mut request)),
+        ("POST", "/newchat") => wait(app, "newchat", json!({})),
+        ("POST", "/send") => wait(app, "send", read_body(&mut request)),
+        ("POST", "/submit") => wait(app, "submit", read_body(&mut request)),
+        ("POST", "/cancel") => wait(app, "cancel", json!({})),
+        // Synthetic user input on the HOST document.
+        ("POST", "/click") => wait(app, "click", read_body(&mut request)),
+        ("POST", "/type") => wait(app, "type", read_body(&mut request)),
+        ("POST", "/press") => wait(app, "press", read_body(&mut request)),
+        // Form-interior input (the form app long-polls /form-poll and acks).
+        ("POST", "/forminput") => form_command(app, "setValue", read_body(&mut request)),
+        ("POST", "/formclick") => form_command(app, "click", read_body(&mut request)),
+        ("GET", "/form-poll") => form_poll(app),
+        ("POST", "/form-ack") => form_ack(app, read_body(&mut request)),
+        ("GET", "/state") => wait(app, "state", json!({})),
+        ("GET", "/dom") => {
+            let selector = query_param(&url, "selector").unwrap_or_else(|| "body".into());
+            wait(app, "dom", json!({ "selector": selector }))
+        }
+        ("GET", "/formdom") => wait(app, "formdom", json!({})),
+        ("GET", "/snapshot") => wait(app, "snapshot", json!({})),
+        _ => Err("not found".to_string()),
+    };
+
+    let _ = match outcome {
+        Ok(result) => request.respond(json_response(200, json!({ "ok": true, "result": result }))),
+        Err(error) => {
+            let code = if error == "not found" { 404 } else { 500 };
+            request.respond(json_response(code, json!({ "ok": false, "error": error })))
+        }
+    };
+}
+
 pub fn start(app: tauri::AppHandle) {
     thread::spawn(move || {
         let server = match Server::http(ADDR) {
@@ -220,52 +342,11 @@ pub fn start(app: tauri::AppHandle) {
             }
         };
         eprintln!("[debug-bridge] listening on http://{ADDR}");
-
-        for mut request in server.incoming_requests() {
-            let method = request.method().as_str().to_string();
-            let url = request.url().to_string();
-            let route = url.split('?').next().unwrap_or("").to_string();
-
-            if method == "OPTIONS" {
-                let _ = request.respond(json_response(204, json!({})));
-                continue;
-            }
-            if method == "GET" && route == "/health" {
-                let _ = request.respond(json_response(200, json!({ "ok": true })));
-                continue;
-            }
-
-            let outcome = match (method.as_str(), route.as_str()) {
-                ("POST", "/connect") => {
-                    let body = read_body(&mut request);
-                    wait(&app, "connect", body)
-                }
-                ("POST", "/send") => {
-                    let body = read_body(&mut request);
-                    wait(&app, "send", body)
-                }
-                ("POST", "/submit") => {
-                    let body = read_body(&mut request);
-                    wait(&app, "submit", body)
-                }
-                ("POST", "/cancel") => wait(&app, "cancel", json!({})),
-                ("GET", "/state") => wait(&app, "state", json!({})),
-                ("GET", "/dom") => {
-                    let selector = query_param(&url, "selector").unwrap_or_else(|| "body".into());
-                    wait(&app, "dom", json!({ "selector": selector }))
-                }
-                ("GET", "/formdom") => wait(&app, "formdom", json!({})),
-                ("GET", "/snapshot") => wait(&app, "snapshot", json!({})),
-                _ => Err("not found".to_string()),
-            };
-
-            let _ = match outcome {
-                Ok(result) => request.respond(json_response(200, json!({ "ok": true, "result": result }))),
-                Err(error) => {
-                    let code = if error == "not found" { 404 } else { 500 };
-                    request.respond(json_response(code, json!({ "ok": false, "error": error })))
-                }
-            };
+        // One thread per request so a long-poll (form channel) doesn't block
+        // other endpoints.
+        for request in server.incoming_requests() {
+            let app = app.clone();
+            thread::spawn(move || handle_request(request, &app));
         }
     });
 }

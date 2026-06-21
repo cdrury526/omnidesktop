@@ -19,8 +19,37 @@ webview handlers). The bridge starts automatically with the app in dev.
 - Host UI (Vite): `http://localhost:1420`, sandbox proxy: `http://localhost:1430`
 - Debug API: `http://127.0.0.1:1456`
 - A demo forms server runs at `http://localhost:3002/mcp`
-  (`cd servers/forms && INPUT=mcp-app.html pnpm exec vite build && PORT=3002 bun main.ts`)
 - Snapshots save to `snapshots/omni-<unix-millis>.png`
+- Dev-only: the whole bridge is gated to debug builds (`#[cfg(debug_assertions)]`
+  + `import.meta.env.DEV`); it never exists in a release build.
+
+## Driving form fields (Tier 2) needs OMNI_DEBUG
+
+`/forminput` and `/formclick` reach inside the cross-origin sandboxed form, so
+the form must be built + served with `OMNI_DEBUG=1` (it opens a command channel
+to the bridge; dev-only, widens only the form's connect-src):
+
+```bash
+cd servers/forms
+OMNI_DEBUG=1 INPUT=mcp-app.html pnpm exec vite build
+OMNI_DEBUG=1 PORT=3002 bun main.ts
+```
+
+Without `OMNI_DEBUG`, host interaction (`/type`,`/click`,`/press`) still works;
+only the in-iframe field driving is disabled.
+
+## Reliable scenario pattern
+
+Isolate and gate on readiness, or commands race form mount:
+
+```bash
+curl -sS -X POST :1456/newchat
+curl -sS -X POST :1456/send -d '{"text":"...make a form..."}'
+# poll until the form is mounted before driving fields:
+until [ "$(curl -s :1456/formdom | jq -r .result.fieldCount)" != "0" ]; do sleep 1; done
+curl -sS -X POST :1456/forminput -d '{"id":"...","value":"..."}'
+curl -sS -X POST :1456/formclick -d '{"target":"submit"}'
+```
 
 ## Start / reuse the app
 
@@ -57,6 +86,23 @@ curl -sS -X POST http://127.0.0.1:1456/submit -H 'content-type: application/json
 
 # cancel the pending interactive form (agent unblocks, card -> cancelled)
 curl -sS -X POST http://127.0.0.1:1456/cancel
+
+# start a fresh conversation (test isolation — do this before a scenario)
+curl -sS -X POST http://127.0.0.1:1456/newchat
+
+# --- synthetic USER INPUT on the host document ---
+curl -sS -X POST http://127.0.0.1:1456/type  -H 'content-type: application/json' \
+  -d '{"selector":".composer textarea","text":"hello"}'
+curl -sS -X POST http://127.0.0.1:1456/press -H 'content-type: application/json' \
+  -d '{"selector":".composer textarea","key":"Enter"}'   # drives the REAL send path
+curl -sS -X POST http://127.0.0.1:1456/click -H 'content-type: application/json' \
+  -d '{"selector":".app-pane-close"}'                     # or any host button / Ant Modal btn
+
+# --- user input INSIDE the cross-origin form iframe (needs OMNI_DEBUG, see below) ---
+curl -sS -X POST http://127.0.0.1:1456/forminput -H 'content-type: application/json' \
+  -d '{"id":"country","value":"Japan"}'
+curl -sS -X POST http://127.0.0.1:1456/formclick -H 'content-type: application/json' \
+  -d '{"target":"submit"}'    # submit | cancel | next | back
 
 # computed box + layout styles of HOST elements (the key tool for layout bugs)
 curl -sS 'http://127.0.0.1:1456/dom?selector=.app-pane-surface%20iframe'
