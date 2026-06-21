@@ -43,6 +43,7 @@ import {
   type ConversationRow,
 } from "./lib/db";
 import { HistoryDrawer } from "./components/HistoryDrawer";
+import { ChatWelcome } from "./components/ChatWelcome";
 import { HistoryOutlined } from "@ant-design/icons";
 import "./App.css";
 
@@ -750,11 +751,7 @@ export default function App() {
               style={{ height: "100%" }}
             />
           ) : (
-            <p className="hint">
-              Pick a model, paste your OpenRouter key, connect an MCP server, then
-              chat. When the model calls a tool that has a UI, the panel slides out
-              automatically.
-            </p>
+            <ChatWelcome onPick={submit} />
           )}
         </section>
 
