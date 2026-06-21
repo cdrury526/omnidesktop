@@ -7,87 +7,65 @@ first. The README is user-facing; this is the engineering brief.
 
 Native Linux desktop AI app (Tauri 2 + React 19 + Ant Design 6). Chat with any
 OpenRouter model; when the model calls an MCP tool that ships a UI (`_meta.ui`),
-a sandboxed **slide-out pane** renders it today — **moving inline into the
-transcript is the next priority** (see below). Everything runs locally; data in
-libSQL, API key in the OS keyring.
+a sandboxed iframe renders **inline in the transcript**, embedded on its tool
+card. Everything runs locally; data in libSQL, API key in the OS keyring.
 
 Status: **working end-to-end and pushed to GitHub** (`cdrury526/omnidesktop`).
 Verified live: model picker, keyring, MCP connect, agent tool-calling,
-interactive forms (HITL) with durable pause/resume, message queuing, cancel.
+interactive forms (HITL) with durable pause/resume, message queuing, cancel,
+**inline MCP Apps** (render / submit / cancel / content-hug sizing / cleanup).
 
-## ▶ NEXT TASK — Inline MCP Apps in the transcript
+## ▶ NEXT TASK — Split-view polish (unblocked)
 
-**Do this before treating split view as done.** The slide-out `AppPane` fights
-the multi-pane workspace.
+Inline MCP Apps landed (commit `5e055728`), so split view is no longer blocked
+on MCP UI placement. Remaining:
 
-### The problem (split view exposed it)
-
-Phase 3 **split view** is implemented locally (`useSplitView`, 50/50 grid, both
-panes stay mounted + streaming). Entering split often **opens the MCP slide-out
-pane** — badly — because:
-
-1. **Per-session side pane** — each `ChatSession` owns an `AppPane`
-   (`position:absolute; right:0; width: var(--pane-width)`). When a second tab
-   becomes visible in split, any session with a pending HITL form
-   (`activation !== null`) suddenly shows its pane. Background tabs with open
-   forms were already “open” but hidden behind `display:none`.
-2. **Width math** — `--pane-width` is `clamp(360px, 42vw, 560px)`. In a 50%
-   split column that can **exceed the pane width**, crushing the chat column
-   (`session-main` gets `margin-right: var(--pane-width)` via `:has(.app-pane.open)`).
-3. **Two side panes** — split can show two sessions each trying to slide a pane
-   into the same workspace edge.
-
-Split view is the right *session* architecture (independent `useAgentChat` per
-tab, focus key for the debug bridge). The **MCP UI placement** is wrong for it.
-
-### Chosen UX (already in backlog — now explicit next work)
-
-**Render MCP Apps inline in the transcript**, embedded on the tool call — not in
-a global/per-session slide-out. The user fills the form where the agent invoked
-the tool; scroll the thread, don’t fight over horizontal space.
-
-`ANTD_X_ADOPTION_PLAN.md` Phase 3 deliberately kept the side pane while moving
-tool *metadata* into `ThoughtChain`:
-
-> Keep the side `AppPane` for the live form; ThoughtChain is the transcript view.
-
-That split was always temporary. **`ThoughtChain` shows args/result; the live
-interactive iframe is still the side pane** — inline embedding closes that gap.
-
-### Implementation sketch (preserve OpenRouter + X + bridge)
-
-**Do not replace `useAgentChat` / `@openrouter/agent`.** This is a mount-target
-change only.
-
-| Layer | Today | Target |
-|-------|--------|--------|
-| HITL pause/resume | `runner.ts` + `pendingHitlCall` + `resumeTurn` | **Unchanged** |
-| App lifecycle | `summonPanel` → `setActivation` → `AppPane` → `mountApp()` | **`callId`-keyed inline mount** in the tool step |
-| Bridge callbacks | `onAppContext` / `onPaneClose` in `useAgentChat` | Same handlers; wire from inline card |
-| Host bridge | `mountApp`, `newAppBridge`, `displayMode: "inline"` already set | Reuse; `onsizechange` sets iframe height — fits inline |
-| Transcript UI | `ToolStep` → `ThoughtChain` (expandable args/result) | **Expandable body hosts the sandbox iframe** when `status === "pending"` (and optionally collapsed preview when done) |
-| Reload | `hydrate` re-summons panel for pending call | Re-mount **inline** at that tool card |
-| Debug bridge | `/openform`, `/forminput`, `/formclick` | Update selectors to inline surface (or keep data attrs on iframe mount) |
-
-**Suggested slices:**
-
-1. **`InlineAppMount`** (extract from `AppPane.tsx`) — given `ToolCallInfo`, mount
-   iframe into a caller-supplied `ref` div; same cleanup on unmount.
-2. **`ToolStep`** — when pending + tool has UI resource, render `InlineAppMount`
-   inside the ThoughtChain step content (antd `Card` shell if needed).
-3. **Stop using slide-out** — remove `AppPane` from `ChatSession` once parity
-   verified (submit, cancel, dirty confirm, reload, queue-while-form-open).
-4. **Split view QA** — two panes, form open in one, agent streaming in the other;
-   no pane steal, no margin-right collapse.
-
-**Guardrails:** sandbox CSP + cross-origin iframe boundary unchanged; don’t
-expose `invoke` to the app; HITL validation host-side stays in `useAgentChat`.
-
-### After inline MCP (queued, not blocked on split)
-
+- **Split polish:** draggable ratio (antd `Splitter`), persist layout in
+  `settings`. (Two-pane QA with a form open in one session + streaming in the
+  other already passes — inline forms live in their own transcript, so there's
+  no pane-steal or column collapse.)
 - **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`): `buildCodeTools`,
   Rust path scoping, HITL for writes/exec.
-- **Split polish:** draggable ratio (antd `Splitter`), persist layout in `settings`.
+
+## ✅ DONE — Inline MCP Apps in the transcript (commit `5e055728`)
+
+The slide-out `AppPane` (per-session, `position:absolute; right:0`) fought the
+multi-pane workspace — entering split could surface a background tab's pending
+form and crush the chat column via `margin-right`. Fixed by moving the live
+interactive iframe **inline onto its tool card**:
+
+- **`InlineAppMount`** (`src/components/InlineAppMount.tsx`) — extracted the
+  iframe/host-bridge lifecycle from `AppPane`; mounts into the pending tool's
+  `ThoughtChain` step (kept expanded so the form can't be collapsed away).
+  Callbacks read via a ref so streaming re-renders don't tear down the form
+  mid-edit. `AppPane.tsx` + its CSS (`.app-pane*`, `--pane-width`, the
+  `:has(.app-pane.open)` margin rule) removed.
+- **`ToolStep`** matches the single pending HITL call by name and renders the
+  mount there; `useAgentChat` still owns `activation` / `onAppContext`.
+- **Content-driven form sizing** — the forms app was `autoResize:false` and
+  filled a fixed-height container, so inline (no definite height) the field area
+  collapsed to the 150px default iframe height. Now the form flows at natural
+  height (`servers/forms/src/global.css`, `mcp-app.tsx`) and the host grows the
+  iframe via `onsizechange`; the embed hugs content (1→174px, 4→382px, 8→644px).
+- HITL pause/resume (`runner.ts`), sandbox CSP, and the cross-origin boundary
+  are unchanged.
+
+**Bridge-testing note:** every mounted form runs the dev `/form-poll` loop, so
+with many tabs open `/formclick`/`/forminput` can be consumed by a *background*
+tab's form. Use host-side `/submit` + `/cancel` (act on the focused tab) for
+deterministic headless tests, or test with a single tab.
+
+## Model tool-call leak guard (commit `5e055728`)
+
+Some models stream their **raw tool-call template** into the text channel
+instead of emitting a structured call, then loop — flooding the transcript and
+wedging the app. Seen with `deepseek/deepseek-v4-flash` on OpenRouter (its
+`<｜…｜>` special tokens; ~18× repetition persisted to `conversation_state`).
+`streamText` (`runner.ts`) now bails on the first `<｜…｜>` / `<|tool…|` token,
+cancels the turn, and the hook shows a clean "malformed tool call — switch
+models" notice; `displayItemsFromState` strips any persisted leaked tail so
+reloads stay clean. **This is model/provider-specific** — prefer a reliable
+tool-calling model (Anthropic/OpenAI/Gemini) for forms.
 
 ---
 
@@ -177,7 +155,7 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 | Host shell (connection, model/key, conversation list, render) | `src/App.tsx` |
 | **Chat session hook** (transcript, composer, turn/HITL/queue/cancel logic) | `src/hooks/useAgentChat.ts` |
 | Empty-state onboarding (`Welcome` + `Prompts`) | `src/components/ChatWelcome.tsx` |
-| Slide-out MCP App pane (**→ inline transcript next**) | `src/components/AppPane.tsx` |
+| Inline MCP App mount (sandbox iframe embedded on its tool card) | `src/components/InlineAppMount.tsx` |
 | Searchable history drawer (Ant) | `src/components/HistoryDrawer.tsx` |
 | Model picker (Ant Select over OpenRouter catalog) | `src/components/ModelPicker.tsx` |
 | **Agent loop** (OpenRouter SDK; HITL forms; queue/repair; tool reliability) | `src/agent/runner.ts` |
@@ -325,7 +303,8 @@ SDK state). Built as three layers:
 Key decisions (locked with the user): custom compact DSL (not JSON Schema);
 `updateModelContext` as the submit channel (our host makes it active);
 `when` in v1; multi-step nav is App-local (one agent call, one result); chat
-shows cards (inline iframe embedding is **NEXT TASK** — currently the side pane).
+shows cards with the live interactive iframe embedded **inline on the tool card**
+(`InlineAppMount`).
 
 Verification: full stack builds green (`tsc --noEmit`, `vite build`, `cargo
 build`, both package typechecks, forms bundle, and the forms server serves the
@@ -375,15 +354,13 @@ The chat→coding workspace is being built in phases (Stitch renders in
   `useAgentChat`; **hidden tabs stay mounted so background turns keep streaming**
   (verified). VS Code-style `TabBar`. `App.tsx` is now the shell: open-tabs
   state, debug bridge routed to the focused tab via a per-session handler
-  registry, tab labels from session `meta` + the conversations list. The MCP
-  slide-out pane is **per-session** (was app-global).
-- **Phase 3 (local, uncommitted)** — **split view**. `useSplitView` +
-  `TabBar` split/merge controls; two visible `ChatSession`s in a 50/50 grid;
-  `focusKey` for debug-bridge `/send`. Open tabs also persist in DB (migration
-  `0003`). **Not production-ready until inline MCP Apps land** — see NEXT TASK.
-
-**Blocked on inline MCP:** do not invest in split polish (resize handle, persisted
-ratio) until the slide-out pane is removed from the split layout path.
+  registry, tab labels from session `meta` + the conversations list. MCP App UI
+  renders **inline on its tool card** per session (`InlineAppMount`).
+- **Phase 3** — **split view**. `useSplitView` + `TabBar` split/merge controls;
+  two visible `ChatSession`s in a 50/50 grid; `focusKey` for debug-bridge
+  `/send`. Open tabs also persist in DB (migration `0003`). Now unblocked —
+  inline MCP Apps removed the slide-out pane that fought the split layout; only
+  polish (resize handle, persisted ratio) remains.
 
 ## Backlog
 
@@ -414,8 +391,8 @@ ratio) until the slide-out pane is removed from the split layout path.
   up top); deltas arrive in bursts, so the bubble grows in chunks rather than
   per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
   reduce time-to-first-token with a snappier model. Not a bug.
-- **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md` / queued
-  after inline MCP Apps.
+- **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md` (now next
+  up alongside split-view polish).
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference
   the earlier result) — built + headless-verified, not yet eyeballed live.
 - Turso sync · production sandbox sidecar · MCP server manager UI · conversation
