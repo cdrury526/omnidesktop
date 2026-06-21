@@ -25,11 +25,18 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial",
-    sql: include_str!("schema/0001_initial.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial",
+        sql: include_str!("schema/0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "code_mode",
+        sql: include_str!("schema/0002_code_mode.sql"),
+    },
+];
 
 /// Apply every pending migration in order. Returns a contextual error naming the
 /// migration that failed, so a botched schema change is obvious in the logs.

@@ -48,6 +48,37 @@ html, body, #root {
 .chat-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .chat-header h1 { font-size: 1.3rem; margin: 0 8px 0 0; }
 
+/* ---- code mode toggle (header, pushed to the right) ---- */
+.code-mode { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.code-mode .folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 200px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  padding: 3px 10px;
+  font-size: 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-mode .folder-chip.empty { color: var(--muted); border-style: dashed; background: transparent; }
+.code-folder { display: inline-flex; align-items: center; gap: 4px; }
+.code-mode .folder-clear {
+  display: inline-flex;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px;
+  font-size: 0.75rem;
+}
+.code-mode .folder-clear:hover { color: var(--accent); }
+
 .status-line { color: var(--muted); font-size: 0.82rem; margin: 6px 0; }
 
 .chat-toolbar { display: flex; align-items: center; gap: 8px; margin: 6px 0; }

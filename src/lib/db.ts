@@ -103,6 +103,36 @@ export async function getMessages(conversationId: number): Promise<StoredMessage
   );
 }
 
+// ---- per-conversation Code mode (working folder) ----
+//
+// Code mode binds a chat to a project folder. We store the toggle + the chosen
+// path as columns on `conversations` (added in migration 0002). The path feeds
+// the agent's system prompt; file access stays behind Rust later.
+
+export interface CodeModeState {
+  codeMode: boolean;
+  workingDir: string | null;
+}
+
+export async function getCodeMode(id: number): Promise<CodeModeState> {
+  const rows = await dbSelect<{ code_mode: number; working_dir: string | null }>(
+    "SELECT code_mode, working_dir FROM conversations WHERE id = ?",
+    [id],
+  );
+  const row = rows[0];
+  return { codeMode: !!row?.code_mode, workingDir: row?.working_dir ?? null };
+}
+
+export async function setCodeMode(
+  id: number,
+  { codeMode, workingDir }: CodeModeState,
+): Promise<void> {
+  await dbExecute(
+    "UPDATE conversations SET code_mode = ?, working_dir = ? WHERE id = ?",
+    [codeMode ? 1 : 0, workingDir, id],
+  );
+}
+
 // ---- SDK conversation state (full item history incl. tool calls/results) ----
 //
 // The OpenRouter agent SDK owns a `ConversationState` per chat: the complete

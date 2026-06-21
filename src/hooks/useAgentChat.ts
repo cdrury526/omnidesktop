@@ -36,6 +36,8 @@ import {
   getMessages,
   getConversationState,
   conversationStateAccessor,
+  getCodeMode,
+  setCodeMode as persistCodeMode,
   logFormEvent,
   touchConversation,
 } from "../lib/db";
@@ -69,6 +71,20 @@ export function useAgentChat({
   const [queued, setQueued] = useState<string[]>([]);
   const [formPending, setFormPending] = useState(false);
   const [activation, setActivation] = useState<ToolCallInfo | null>(null);
+  // Code mode: bound per-conversation, injected into the agent's prompt. Held
+  // here (alongside the turn loop that consumes it) and mirrored to the DB. A
+  // ref keeps the latest values readable from stable turn callbacks.
+  const [codeMode, setCodeModeState] = useState(false);
+  const [workingDir, setWorkingDirState] = useState<string | null>(null);
+  const codeModeRef = useRef<{ codeMode: boolean; workingDir: string | null }>({ codeMode: false, workingDir: null });
+  useEffect(() => {
+    codeModeRef.current = { codeMode, workingDir };
+  }, [codeMode, workingDir]);
+  /** The folder to inject this turn, or undefined when code mode is off/unset. */
+  const activeWorkingDir = useCallback(
+    () => (codeModeRef.current.codeMode ? codeModeRef.current.workingDir ?? undefined : undefined),
+    [],
+  );
   const flushingRef = useRef(false);
   // Aborts the in-flight turn (Sender's cancel button → runner's result.cancel()).
   const abortRef = useRef<AbortController | null>(null);
@@ -125,7 +141,33 @@ export function useAgentChat({
    * awaiting form input, re-mount the panel for the pending call so the user
    * can still submit — even after a reload.
    */
+  // ---- code-mode setters: update UI state + persist to the active chat ----
+  // (When there's no conversation yet, runUserTurn persists on creation.)
+
+  const setCodeMode = useCallback(
+    (on: boolean) => {
+      setCodeModeState(on);
+      const dir = codeModeRef.current.workingDir;
+      if (conversationId != null) void persistCodeMode(conversationId, { codeMode: on, workingDir: dir });
+      logEvent({ source: "user", type: "codemode.toggle", conversationId, data: { on, hasDir: !!dir } });
+    },
+    [conversationId],
+  );
+
+  const setWorkingDir = useCallback(
+    (dir: string | null) => {
+      setWorkingDirState(dir);
+      const on = codeModeRef.current.codeMode;
+      if (conversationId != null) void persistCodeMode(conversationId, { codeMode: on, workingDir: dir });
+      logEvent({ source: "user", type: "codemode.folder", conversationId, data: { hasDir: !!dir } });
+    },
+    [conversationId],
+  );
+
   const hydrate = useCallback(async (id: number) => {
+    const cm = await getCodeMode(id);
+    setCodeModeState(cm.codeMode);
+    setWorkingDirState(cm.workingDir);
     const state = await getConversationState(id);
     if (state) {
       setMessages(displayItemsFromState(state));
@@ -154,6 +196,8 @@ export function useAgentChat({
     setQueued([]);
     setFormPending(false);
     setActivation(null);
+    setCodeModeState(false);
+    setWorkingDirState(null);
     toolSeenRef.current.clear();
     formDirtyRef.current = false;
   }, []);
@@ -192,6 +236,9 @@ export function useAgentChat({
       if (convId == null) {
         convId = await createConversation(text.slice(0, 60));
         setConversationId(convId);
+        // Persist the code-mode state chosen before the chat existed.
+        const cm = codeModeRef.current;
+        if (cm.codeMode || cm.workingDir) await persistCodeMode(convId, cm);
       }
 
       setMessages((m) => [
@@ -207,14 +254,15 @@ export function useAgentChat({
 
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       const state = conversationStateAccessor(convId);
+      const workingDir = activeWorkingDir();
       try {
-        await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal });
+        await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir });
         let st = await getConversationState(convId);
         // Self-repair: if the model described a form but didn't call the tool,
         // re-prompt once with the tool forced (only when the forms tool exists).
         if (!controller.signal.aborted && server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
           logEvent({ source: "repair", type: "repair.fired", conversationId: convId });
-          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal });
+          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir });
           st = await getConversationState(convId);
         }
         // Reconcile with persisted state (surfaces tool cards). The panel, if a
@@ -239,7 +287,7 @@ export function useAgentChat({
       }
       return convId;
     },
-    [busy, apiKey, model, conversationId, server, setConnError, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, onConversationsChanged],
+    [busy, apiKey, model, conversationId, server, setConnError, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, onConversationsChanged, activeWorkingDir],
   );
 
   /** Send (or queue) a message. `raw` comes from Sender's onSubmit. */
@@ -303,7 +351,7 @@ export function useAgentChat({
       const accessor = conversationStateAccessor(convId);
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       try {
-        await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal });
+        await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir: activeWorkingDir() });
         const st = await getConversationState(convId);
         applyState(st);
         emitToolEvents(convId, st);
@@ -449,6 +497,10 @@ export function useAgentChat({
     setQueued,
     formPending,
     activation,
+    codeMode,
+    workingDir,
+    setCodeMode,
+    setWorkingDir,
     submit,
     cancelTurn,
     runUserTurn,

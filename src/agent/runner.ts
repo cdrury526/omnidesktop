@@ -116,6 +116,26 @@ const SYSTEM_PROMPT =
   "says the user cancelled, acknowledge briefly and move on.";
 
 /**
+ * Build the turn instructions, appending a Code-mode section when a working
+ * folder is bound to the conversation. There are no file-access tools yet — the
+ * section only grounds the model in the project root; it must not claim to have
+ * read or written files.
+ */
+function instructionsFor(workingDir?: string): string {
+  if (!workingDir) return SYSTEM_PROMPT;
+  return (
+    SYSTEM_PROMPT +
+    "\n\n## Code mode\n" +
+    "You are in code mode for a software project. The working folder for this " +
+    `session is \`${workingDir}\`. Treat it as the project root: when the user ` +
+    'says "the project", "this repo", or names files without an absolute path, ' +
+    "resolve them relative to that folder. You do NOT have file-access tools " +
+    "yet, so do not claim to have read, listed, or written any files — reason " +
+    "from what the user tells you and ask for file contents when you need them."
+  );
+}
+
+/**
  * Persistence seam for the SDK's `ConversationState`. Matches the SDK's
  * `StateAccessor` shape; `conversationStateAccessor` in `lib/db.ts` is the
  * DB-backed implementation. `unknown` here keeps the runner DB-agnostic — the
@@ -172,6 +192,8 @@ export interface RunTurnArgs {
   onTextDelta: (delta: string) => void;
   /** Abort the in-flight turn (cooperative — calls the SDK's `result.cancel()`). */
   signal?: AbortSignal;
+  /** Code mode: the conversation's working folder, injected into the prompt. */
+  workingDir?: string;
 }
 
 /** Run one user turn; streams assistant text via onTextDelta, returns full text. */
@@ -183,11 +205,12 @@ export async function runTurn({
   tools,
   onTextDelta,
   signal,
+  workingDir,
 }: RunTurnArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
     model,
-    instructions: SYSTEM_PROMPT,
+    instructions: instructionsFor(workingDir),
     // Only the new message is "fresh" input; the SDK prepends prior history
     // from `state` (including function_call / function_call_output items) and
     // saves the response output + tool results back after each turn.
@@ -270,6 +293,8 @@ export interface RepairArgs {
   tools: McpTools;
   onTextDelta: (delta: string) => void;
   signal?: AbortSignal;
+  /** Code mode: the conversation's working folder, injected into the prompt. */
+  workingDir?: string;
 }
 
 /** Re-prompt the model with the tool forced, after it described instead of calling. */
@@ -281,11 +306,12 @@ export async function repairToolCall({
   tools,
   onTextDelta,
   signal,
+  workingDir,
 }: RepairArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
     model,
-    instructions: SYSTEM_PROMPT,
+    instructions: instructionsFor(workingDir),
     // A developer message — not shown in the transcript (display only renders
     // user/assistant) — nudges; tool_choice forces the call.
     input: [
@@ -314,6 +340,8 @@ export interface ResumeTurnArgs {
   tools: McpTools;
   onTextDelta: (delta: string) => void;
   signal?: AbortSignal;
+  /** Code mode: the conversation's working folder, injected into the prompt. */
+  workingDir?: string;
 }
 
 /** Resume a HITL-paused conversation by supplying a paused call's result. */
@@ -326,11 +354,12 @@ export async function resumeTurn({
   tools,
   onTextDelta,
   signal,
+  workingDir,
 }: ResumeTurnArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
     model,
-    instructions: SYSTEM_PROMPT,
+    instructions: instructionsFor(workingDir),
     input: [
       { type: "function_call_output", callId, output: JSON.stringify(output) },
     ] as never,

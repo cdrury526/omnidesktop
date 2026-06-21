@@ -8,6 +8,7 @@ import { useDebugBridge } from "./lib/debug-bridge";
 import { logEvent, installErrorCapture } from "./lib/events";
 import { useAgentChat } from "./hooks/useAgentChat";
 import { ModelPicker } from "./components/ModelPicker";
+import { CodeModeToggle } from "./components/CodeModeToggle";
 import { AppPane } from "./components/AppPane";
 import { getApiKey, saveApiKey, deleteApiKey, keyringAvailable } from "./lib/secrets";
 import {
@@ -157,6 +158,7 @@ export default function App() {
   });
   const {
     messages, input, setInput, busy, queued, setQueued, formPending, activation,
+    codeMode, workingDir, setCodeMode, setWorkingDir,
     submit, cancelTurn, hydrate, resetChat, onAppContext, onPaneClose,
   } = chat;
 
@@ -348,6 +350,12 @@ export default function App() {
             {keyStatus === "unsaved" && "● unsaved"}
             {keyStatus === "empty" && "no key"}
           </span>
+          <CodeModeToggle
+            codeMode={codeMode}
+            workingDir={workingDir}
+            onCodeModeChange={setCodeMode}
+            onWorkingDirChange={setWorkingDir}
+          />
         </header>
 
         <section className="connect-row">
