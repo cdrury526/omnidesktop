@@ -22,5 +22,20 @@ engineering brief.
 - **Never commit local/secret files**: `.env`, `.cursor/`, `.claude/projects/`,
   `.firecrawl/`, `google-cloud-sdk/`, `tools/`, `dist/`, `target/`.
 - End commit messages with the `Co-Authored-By` trailer (see AGENTS.md).
-- Prefer Ant Design X / antd primitives over hand-rolling; use the project skills
-  before writing UI code. Keep files under 600 lines.
+- Keep files under 600 lines.
+- **Use Ant Design X / antd components — do NOT hand-roll UI.** This is a hard
+  rule, not a preference. A raw `<button>`, `<ul>/<li>`, `<label>`, or a control
+  built from `<div>` + custom CSS is a code smell — reach for the antd primitive
+  instead: `Button`, `List`, `Tag`, `Form`, `Menu`, `Tabs`, `Segmented`,
+  `Collapse`, `Switch`, `Tooltip`, `Popconfirm`, etc. (icons from
+  `@ant-design/icons`).
+- **Before writing ANY UI, invoke the relevant UI skill** to get the right
+  component + its real API: **`antd`** (all antd primitives, props, tokens,
+  demos), **`x-components`** (Bubble, Sender, ThoughtChain, Conversations,
+  Welcome, Prompts, Attachments…), **`x-markdown`**, **`use-x-chat`**,
+  **`x-card`**. Don't guess component names or props — ask the skill.
+- If a component's built-in behavior doesn't fit, **use it as a shell and opt out
+  of the part you don't want** (e.g. antd `Tabs` as a pure tab-strip with no
+  panels) rather than reimplementing it. Only hand-roll as a last resort — and
+  then match antd tokens and record it in the HANDOFF backlog. Full mapping +
+  skill list in AGENTS.md.

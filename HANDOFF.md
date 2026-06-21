@@ -319,9 +319,14 @@ existing "Inline-panel embedding" backlog item.)
 
 ## Backlog
 
-- **Prefer antd / Ant Design X look — even when we can't use the full component
-  (user preference).** The `TabBar` (`src/components/TabBar.tsx`) is currently
-  **hand-rolled** divs + CSS (only `@ant-design/icons` from the Ant family). The
+- **Migrate hand-rolled controls to antd (known debt + user preference).** A
+  chunk of the rail/tabs work was hand-rolled and should move onto antd
+  primitives (see the hard rule in CLAUDE.md / AGENTS.md): `TabBar` → `Tabs`,
+  `SideRail` items → `Menu`/`Segmented`+`Button`, `CodeModeToggle` folder chip →
+  `Tag`, `ProjectsPanel` session list → `List`, `SettingsPanel` fields → `Form`,
+  `App.tsx` `<button>`s (New chat / panel-close) → `Button`. The `TabBar`
+  (`src/components/TabBar.tsx`) is currently **hand-rolled** divs + CSS (only
+  `@ant-design/icons` from the Ant family). The
   user wants the antd/X visual language preserved across the app, and — key
   insight — we can usually still *use* the antd primitive even when its built-in
   behavior doesn't fit, by opting out of the parts we don't want rather than
