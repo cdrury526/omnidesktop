@@ -123,6 +123,12 @@ export default function App() {
 
   const [activation, setActivation] = useState<ToolCallInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Keep the transcript pinned to the newest message. Phase 0 shim — covers
+  // every message change (new turns, hydration, queue), not just stream deltas.
+  // Removed once Bubble.List (Phase 1) provides native autoscroll.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages, queued]);
   // The latest server, readable from stable callbacks without re-binding them.
   const serverRef = useRef<ServerInfo | null>(null);
   useEffect(() => {
