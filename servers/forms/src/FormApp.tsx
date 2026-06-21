@@ -9,8 +9,36 @@
 import type { App } from "@modelcontextprotocol/ext-apps";
 import type { Field, FormSpec, FormValues, Issue } from "@omni/forms-dsl";
 import { evalCondition, FORM_SUBMIT_KEY, toSteps, validateResult } from "@omni/forms-dsl";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FieldRenderer } from "./FieldRenderer";
+
+/** Report computed layout to the host (via sendLog) so the debug bridge can
+ *  introspect this cross-origin iframe. The key question: is the submit button
+ *  inside the viewport, or clipped? */
+function reportLayout(app: App) {
+  const rect = (sel: string) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), bottom: Math.round(r.bottom) };
+  };
+  const btn = document.querySelector("footer button.primary");
+  const btnRect = btn?.getBoundingClientRect();
+  void app.sendLog({
+    level: "info",
+    data: {
+      kind: "omni.form/metrics",
+      viewport: { w: window.innerWidth, h: window.innerHeight },
+      formapp: rect(".formapp"),
+      fields: rect(".fields"),
+      footer: rect("footer"),
+      submitButton: btnRect
+        ? { label: btn?.textContent, bottom: Math.round(btnRect.bottom), visible: btnRect.bottom <= window.innerHeight + 1 && btnRect.top >= -1 }
+        : null,
+      fieldCount: document.querySelectorAll(".fields .field, .fields .info").length,
+    },
+  });
+}
 
 function visibleFields(fields: Field[], values: FormValues): Field[] {
   return fields.filter((f) => !f.when || evalCondition(f.when, values));
@@ -38,6 +66,12 @@ export function FormApp({ app, spec }: { app: App; spec: FormSpec }) {
   const step = steps[stepIdx];
   const isLast = stepIdx === steps.length - 1;
   const shown = visibleFields(step.fields, values);
+
+  // Report layout after each render so the debug bridge can see inside the iframe.
+  useEffect(() => {
+    const id = setTimeout(() => reportLayout(app), 60);
+    return () => clearTimeout(id);
+  });
 
   const set = (id: string, v: FormValues[string]) =>
     setValues((prev) => ({ ...prev, [id]: v }));

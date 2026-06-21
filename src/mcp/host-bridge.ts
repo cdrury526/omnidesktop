@@ -241,6 +241,15 @@ function hookInitializedCallback(appBridge: AppBridge): Promise<void> {
 export type ModelContext = McpUiUpdateModelContextRequest["params"];
 export type AppMessage = McpUiMessageRequest["params"];
 
+/**
+ * Latest layout metrics a form app reported via `sendLog` — the only window
+ * into the cross-origin iframe's interior (the debug bridge surfaces it).
+ */
+let latestFormMetrics: unknown = null;
+export function getLatestFormMetrics(): unknown {
+  return latestFormMetrics;
+}
+
 export interface AppBridgeCallbacks {
   onContextUpdate?: (context: ModelContext | null) => void;
   onMessage?: (message: AppMessage) => void;
@@ -306,7 +315,13 @@ export function newAppBridge(
     return {};
   };
 
-  appBridge.onloggingmessage = (params) => log.info("App log:", params);
+  appBridge.onloggingmessage = (params) => {
+    // Form apps report their own computed layout here (the debug bridge reads it
+    // to introspect the cross-origin iframe interior). Other logs just print.
+    const data = params?.data as { kind?: string } | undefined;
+    if (data?.kind === "omni.form/metrics") latestFormMetrics = data;
+    else log.info("App log:", params);
+  };
 
   appBridge.onupdatemodelcontext = async (params) => {
     const hasContent = params.content && params.content.length > 0;

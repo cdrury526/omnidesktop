@@ -31,4 +31,7 @@ keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 # sync later, add features: "replication", "remote", "sync", "tls".
 libsql = { version = "0.9", default-features = false, features = ["core"] }
 tokio = { version = "1", features = ["sync"] }
+# Local debug bridge: a tiny HTTP server an agent drives to introspect/iterate.
+tiny_http = "0.12"
+base64 = "0.22"
 
