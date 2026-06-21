@@ -14,11 +14,22 @@ Status: **working end-to-end and pushed to GitHub** (`cdrury526/omnidesktop`).
 Verified live: model picker, keyring, MCP connect, agent tool-calling,
 interactive forms (HITL) with durable pause/resume, message queuing, cancel.
 
-## ▶ STATUS — Ant Design X adoption DONE (in review)
+## ▶ NEXT TASK — `CODE_MODE_BRIEF.md` (chat → coding app)
 
-`ANTD_X_ADOPTION_PLAN.md` is **implemented**, one stacked PR per phase
-(`feat/antd-x-phase-{0,1,2,3,4,6,7}` → PRs #10–#16), each bridge-verified before
-the next. The chat is now `Bubble.List` + `XMarkdown` + `Sender` + `ThoughtChain`
+The next body of work is the **first leap from chat app to coding app**: a
+per-chat **Code Mode** toggle + **working-folder** picker, persisted per
+conversation and injected into the agent's prompt. See **`CODE_MODE_BRIEF.md`** —
+a discussion brief (not a finalized plan) covering scope (and what's deferred),
+the destination from the Stitch renders in `stitch-renders/`, codebase
+touchpoints (migration `0002`, Tauri dialog plugin, runner prompt injection,
+header toggle), the **filesystem-tools architecture** for the phase after
+(agent tools → Rust commands, path-scoped + HITL-approved), open decisions, and
+a concrete first slice. Start there; it's meant to be discussed/refined first.
+
+## DONE — Ant Design X adoption (merged to `main`)
+
+`ANTD_X_ADOPTION_PLAN.md` is **implemented and merged**, one PR per phase
+(PRs #10–#16, all merged), each bridge-verified before the next. The chat is now `Bubble.List` + `XMarkdown` + `Sender` + `ThoughtChain`
 + `Welcome`/`Prompts` under `XProvider`; the form inputs are antd (the native
 datepicker bug is fixed). The `@openrouter/agent` loop, MCP Apps sandbox,
 persistence, and observability are untouched. The two reported bugs (no
