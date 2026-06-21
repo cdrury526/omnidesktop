@@ -6,7 +6,7 @@
  * they live in History.
  */
 import { useMemo } from "react";
-import { Collapse, Empty, Popconfirm, Tooltip } from "antd";
+import { Collapse, Empty, List, Popconfirm, Tooltip } from "antd";
 import { DeleteOutlined, FolderOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
 
@@ -85,6 +85,7 @@ export function ProjectsPanel({
             <Tooltip title="New chat in this project">
               <PlusOutlined
                 className="project-add"
+                aria-label="New chat in this project"
                 onClick={(e) => {
                   e.stopPropagation();
                   onNewInProject(p.dir);
@@ -93,32 +94,37 @@ export function ProjectsPanel({
             </Tooltip>
           ),
           children: (
-            <ul className="project-sessions">
-              {p.sessions.map((c) => (
-                <li
-                  key={c.id}
-                  className={`project-session ${c.id === activeId ? "active" : ""}`}
+            <List
+              size="small"
+              dataSource={p.sessions}
+              renderItem={(c) => (
+                <List.Item
                   onClick={() => onSelect(c.id)}
+                  className={`project-session ${c.id === activeId ? "active" : ""}`}
+                  aria-label={c.title || `Chat ${c.id}`}
+                  actions={[
+                    <Popconfirm
+                      key="del"
+                      title="Delete this conversation?"
+                      okText="Delete"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={(e) => {
+                        e?.stopPropagation();
+                        onDelete(c.id);
+                      }}
+                      onCancel={(e) => e?.stopPropagation()}
+                    >
+                      <DeleteOutlined
+                        className="session-del"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </Popconfirm>,
+                  ]}
                 >
                   <span className="session-title">{c.title || `Chat ${c.id}`}</span>
-                  <Popconfirm
-                    title="Delete this conversation?"
-                    okText="Delete"
-                    okButtonProps={{ danger: true }}
-                    onConfirm={(e) => {
-                      e?.stopPropagation();
-                      onDelete(c.id);
-                    }}
-                    onCancel={(e) => e?.stopPropagation()}
-                  >
-                    <DeleteOutlined
-                      className="session-del"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </Popconfirm>
-                </li>
-              ))}
-            </ul>
+                </List.Item>
+              )}
+            />
           ),
         }))}
       />
