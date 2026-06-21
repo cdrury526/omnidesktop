@@ -69,9 +69,13 @@ pub fn run() {
             app.manage(db);
 
             // Local debug bridge (dev tool): an HTTP server an agent can drive
-            // to introspect and iterate on the UI. See src/debug.rs.
-            app.manage(debug::DebugStore::default());
-            debug::start(app.handle().clone());
+            // to introspect and iterate on the UI. Dev-only — never started in a
+            // release build. See src/debug.rs.
+            #[cfg(debug_assertions)]
+            {
+                app.manage(debug::DebugStore::default());
+                debug::start(app.handle().clone());
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

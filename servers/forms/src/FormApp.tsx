@@ -9,8 +9,10 @@
 import type { App } from "@modelcontextprotocol/ext-apps";
 import type { Field, FormSpec, FormValues, Issue } from "@omni/forms-dsl";
 import { evalCondition, FORM_CANCEL_KEY, FORM_DIRTY_KEY, FORM_SUBMIT_KEY, toSteps, validateResult } from "@omni/forms-dsl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FieldRenderer } from "./FieldRenderer";
+
+const DEBUG_BRIDGE = "http://127.0.0.1:1456";
 
 /** Report computed layout to the host (via sendLog) so the debug bridge can
  *  introspect this cross-origin iframe. The key question: is the submit button
@@ -128,6 +130,56 @@ export function FormApp({ app, spec }: { app: App; spec: FormSpec }) {
     });
     setSubmitted(true);
   }
+
+  // Dev-only: apply commands an agent drives through the debug bridge. The ref is
+  // reassigned every render so the long-lived poll loop always sees fresh state.
+  const dispatchRef = useRef<(cmd: { action: string; params: Record<string, unknown> }) => unknown>(() => {});
+  dispatchRef.current = ({ action, params }) => {
+    if (action === "setValue") {
+      set(String(params.id), params.value as FormValues[string]);
+      return { ok: true, id: params.id, value: params.value };
+    }
+    if (action === "click") {
+      const t = String(params.target);
+      if (t === "submit") void submit();
+      else if (t === "cancel") cancel();
+      else if (t === "next") next();
+      else if (t === "back") back();
+      else return { error: `unknown target ${t}` };
+      return { ok: true, target: t };
+    }
+    return { error: `unknown action ${action}` };
+  };
+
+  useEffect(() => {
+    if (!__OMNI_DEBUG__) return;
+    let stopped = false;
+    (async () => {
+      while (!stopped) {
+        try {
+          const res = await fetch(`${DEBUG_BRIDGE}/form-poll`);
+          const cmd = (await res.json())?.result;
+          if (!cmd || cmd.none) continue;
+          let result: unknown;
+          try {
+            result = dispatchRef.current(cmd);
+          } catch (e) {
+            result = { error: e instanceof Error ? e.message : String(e) };
+          }
+          await fetch(`${DEBUG_BRIDGE}/form-ack`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ cmdId: cmd.cmdId, result }),
+          });
+        } catch {
+          await new Promise((r) => setTimeout(r, 800)); // bridge unreachable — back off
+        }
+      }
+    })();
+    return () => {
+      stopped = true;
+    };
+  }, []);
 
   if (submitted) {
     return (

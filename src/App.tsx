@@ -108,6 +108,16 @@ export default function App() {
     serverRef.current = server;
   }, [server]);
 
+  // Whether the open form has unsaved input — reported by the form app (the host
+  // can't see inside the cross-origin iframe). Drives the confirm-on-cancel.
+  const formDirtyRef = useRef(false);
+  // Summon a panel for a fresh tool call; the new form starts clean so a stale
+  // dirty flag from a previous form can't trigger a spurious discard prompt.
+  const summonPanel = useCallback((info: ToolCallInfo) => {
+    formDirtyRef.current = false;
+    setActivation(info);
+  }, []);
+
   const refreshConversations = useCallback(async () => {
     setConversations(await listConversations());
   }, []);
@@ -126,7 +136,7 @@ export default function App() {
       const srv = serverRef.current;
       if (pending && srv?.tools.has(pending.name)) {
         const info = callTool(srv, pending.name, pending.args);
-        setActivation(info);
+        summonPanel(info);
       } else {
         setActivation(null);
       }
@@ -247,7 +257,7 @@ export default function App() {
       ]);
       setBusy(true);
 
-      const tools = server ? buildMcpTools(server, setActivation) : [];
+      const tools = server ? buildMcpTools(server, summonPanel) : [];
       const state = conversationStateAccessor(convId);
       try {
         await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant });
@@ -272,10 +282,6 @@ export default function App() {
     setInput("");
     await runUserTurn(text);
   }, [input, runUserTurn]);
-
-  // Whether the open form has unsaved input — reported by the form app (the host
-  // can't see inside the cross-origin iframe). Drives the confirm-on-cancel.
-  const formDirtyRef = useRef(false);
 
   /**
    * Feed an output back to the pending HITL call and resume. `build` derives the
@@ -302,7 +308,7 @@ export default function App() {
       setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
 
       const accessor = conversationStateAccessor(convId);
-      const tools = server ? buildMcpTools(server, setActivation) : [];
+      const tools = server ? buildMcpTools(server, summonPanel) : [];
       try {
         await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
         setMessages(displayItemsFromState(await getConversationState(convId)));
@@ -387,6 +393,10 @@ export default function App() {
       void setSetting("server_url", url);
       return { name: info.name, tools: [...info.tools.keys()] };
     },
+    newchat: async () => {
+      newChat();
+      return { ok: true };
+    },
     send: async (text) => {
       const convId = await runUserTurn(text);
       const st = convId != null ? await getConversationState(convId) : null;
@@ -404,7 +414,7 @@ export default function App() {
     },
     state: async () => {
       const st = conversationId != null ? await getConversationState(conversationId) : null;
-      return { conversationId, busy, connected: !!server, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+      return { conversationId, busy, connected: !!server, formDirty: formDirtyRef.current, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
     },
   });
 

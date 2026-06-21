@@ -17,6 +17,8 @@ import { getLatestFormMetrics } from "../mcp/host-bridge";
 export interface DebugHandles {
   /** Connect to an MCP server URL (so a turn has tools). */
   connect: (url: string) => Promise<unknown>;
+  /** Start a fresh conversation (test isolation). */
+  newchat: () => Promise<unknown>;
   /** Run a chat turn with `text`; resolve when it completes or pauses. */
   send: (text: string) => Promise<unknown>;
   /** Resolve the pending HITL form with `values` (drives submit headlessly). */
@@ -60,6 +62,37 @@ function inspectDom(selector: string) {
   };
 }
 
+// ---- synthetic user input on the host document ----
+
+function hostClick(selector: string) {
+  const el = document.querySelector(selector) as HTMLElement | null;
+  if (!el) throw new Error(`/click: no element matches ${selector}`);
+  el.scrollIntoView({ block: "center" });
+  el.click();
+  return { clicked: true, tag: el.tagName.toLowerCase(), text: el.textContent?.trim().slice(0, 60) };
+}
+
+/** Set an input/textarea value the way React notices (native setter + input event). */
+function hostType(selector: string, text: string) {
+  const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
+  if (!el) throw new Error(`/type: no element matches ${selector}`);
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  setter?.call(el, text);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return { ok: true, value: el.value };
+}
+
+function hostPress(key: string, selector?: string) {
+  const el = (selector ? document.querySelector(selector) : document.activeElement) as HTMLElement | null;
+  const target = el ?? document.body;
+  const opts = { key, bubbles: true, cancelable: true };
+  target.dispatchEvent(new KeyboardEvent("keydown", opts));
+  target.dispatchEvent(new KeyboardEvent("keyup", opts));
+  return { ok: true, key, on: target.tagName.toLowerCase() };
+}
+
 async function snapshot() {
   // html2canvas only sees same-origin DOM; the cross-origin form iframe renders
   // blank. Still useful for the chat transcript, cards, and pane sizing.
@@ -76,6 +109,7 @@ export function useDebugBridge(handles: DebugHandles) {
   ref.current = handles;
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return; // dev-only; never wires up in a release build
     const unlisten = listen<{ requestId: string; action: string; params: Record<string, unknown> }>(
       "debug://request",
       async (event) => {
@@ -85,6 +119,9 @@ export function useDebugBridge(handles: DebugHandles) {
           switch (action) {
             case "connect":
               result = await ref.current.connect(String(params?.url ?? ""));
+              break;
+            case "newchat":
+              result = await ref.current.newchat();
               break;
             case "send":
               result = await ref.current.send(String(params?.text ?? ""));
@@ -97,6 +134,15 @@ export function useDebugBridge(handles: DebugHandles) {
               break;
             case "state":
               result = await ref.current.state();
+              break;
+            case "click":
+              result = hostClick(String(params?.selector ?? ""));
+              break;
+            case "type":
+              result = hostType(String(params?.selector ?? ""), String(params?.text ?? ""));
+              break;
+            case "press":
+              result = hostPress(String(params?.key ?? ""), params?.selector ? String(params.selector) : undefined);
               break;
             case "dom":
               result = inspectDom(String(params?.selector ?? "body"));
