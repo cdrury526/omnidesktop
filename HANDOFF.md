@@ -186,11 +186,13 @@ Follow-ups are tracked in the Backlog below.
 ## Backlog
 
 From the interactive-forms work:
-- **Form-cancel path (correctness gap).** Closing the pane on a pending form
-  leaves the HITL call dangling in `awaiting_hitl` forever — the conversation
-  can't proceed. Closing (or an explicit "Cancel") should resolve the call as
-  cancelled (`resumeTurn` with an `{ cancelled: true }` / rejected output) and
-  log a `cancelled` `form_events` row.
+- ~~Form-cancel path~~ **DONE.** Pane ✕ and an in-form Cancel button both resolve
+  the HITL call as cancelled (`{ cancelled: true }`), card → `cancelled`, agent
+  acknowledges, `cancelled` row logged. Confirms only if the form is dirty — the
+  form reports a dirty flag to the host (cross-origin) via `updateModelContext`
+  (`FORM_DIRTY_KEY`). NOTE: the dirty→`Modal.confirm` branch is the one path not
+  verified headlessly (needs a click); the resolution path is verified via the
+  bridge's `/cancel`.
 - Inline-panel embedding in the transcript (cards currently link to the side
   pane; the chosen UX is the rendered app inline per card).
 - Extract a `useAgentChat` hook from `App.tsx` (457 lines) before it hits the

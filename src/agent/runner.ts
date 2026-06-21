@@ -93,7 +93,9 @@ const SYSTEM_PROMPT =
   "panel beside the chat (forms, dropdowns, pickers); prefer them over asking " +
   "for structured input in prose. After opening such a panel, briefly tell the " +
   "user to fill it in — do not invent their answers; you will receive the " +
-  "submitted values as the tool result.";
+  "submitted values as the tool result. If a tool result says the user " +
+  "cancelled, acknowledge it briefly and move on; don't reopen the form unless " +
+  "they ask.";
 
 /**
  * Persistence seam for the SDK's `ConversationState`. Matches the SDK's
@@ -229,7 +231,7 @@ export type DisplayItem =
       kind: "tool";
       callId: string;
       name: string;
-      status: "pending" | "done" | "error";
+      status: "pending" | "done" | "error" | "cancelled";
     };
 
 function itemText(content: unknown): string {
@@ -278,7 +280,11 @@ export function displayItemsFromState(state: unknown): DisplayItem[] {
       const card = cardByCall.get(callIdOf(item));
       if (card) {
         const output = typeof item.output === "string" ? item.output : JSON.stringify(item.output);
-        card.status = output.includes('"error"') ? "error" : "done";
+        card.status = output.includes('"cancelled"')
+          ? "cancelled"
+          : output.includes('"error"')
+            ? "error"
+            : "done";
       }
       continue;
     }

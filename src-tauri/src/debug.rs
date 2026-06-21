@@ -9,6 +9,7 @@
 //!   POST /connect  {url}              -> connect to an MCP server
 //!   POST /send     {text}             -> run a chat turn with `text`
 //!   POST /submit   {values}           -> resolve the pending HITL form
+//!   POST /cancel                       -> cancel the pending HITL form
 //!   GET  /state                       -> active conversation + pending call + items
 //!   GET  /dom?selector=CSS            -> computed box + styles of host elements
 //!   GET  /formdom                     -> the form iframe's self-reported layout
@@ -247,6 +248,7 @@ pub fn start(app: tauri::AppHandle) {
                     let body = read_body(&mut request);
                     wait(&app, "submit", body)
                 }
+                ("POST", "/cancel") => wait(&app, "cancel", json!({})),
                 ("GET", "/state") => wait(&app, "state", json!({})),
                 ("GET", "/dom") => {
                     let selector = query_param(&url, "selector").unwrap_or_else(|| "body".into());
