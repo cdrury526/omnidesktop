@@ -217,6 +217,59 @@ export async function touchConversation(id: number, title?: string): Promise<voi
 }
 
 export async function deleteConversation(id: number): Promise<void> {
+  await dbExecute("DELETE FROM tabs WHERE conversation_id = ?", [id]);
   await dbExecute("DELETE FROM messages WHERE conversation_id = ?", [id]);
   await dbExecute("DELETE FROM conversations WHERE id = ?", [id]);
+}
+
+// ---- open tabs (tab bar persistence) ----
+//
+// Each row is one tab in the VS Code-style tab bar. Restored on startup in
+// position order; the active tab id lives in settings (`active_tab_id`).
+
+export interface TabRow {
+  id: number;
+  conversation_id: number | null;
+  working_dir: string | null;
+  position: number;
+}
+
+export async function listTabs(): Promise<TabRow[]> {
+  return dbSelect<TabRow>(
+    "SELECT id, conversation_id, working_dir, position FROM tabs ORDER BY position, id",
+  );
+}
+
+export async function createTab(
+  conversationId: number | null = null,
+  workingDir: string | null = null,
+): Promise<number> {
+  const r = await dbExecute(
+    "INSERT INTO tabs(kind, conversation_id, working_dir, position) " +
+      "VALUES('chat', ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM tabs))",
+    [conversationId, workingDir],
+  );
+  return r.lastInsertId;
+}
+
+export async function deleteTab(id: number): Promise<void> {
+  await dbExecute("DELETE FROM tabs WHERE id = ?", [id]);
+}
+
+export async function updateTabConversation(id: number, conversationId: number): Promise<void> {
+  await dbExecute(
+    "UPDATE tabs SET conversation_id = ?, updated_at = datetime('now') WHERE id = ?",
+    [conversationId, id],
+  );
+}
+
+export async function getActiveTabId(): Promise<number | null> {
+  const raw = await getSetting("active_tab_id");
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function setActiveTabId(id: number): Promise<void> {
+  await setSetting("active_tab_id", String(id));
 }

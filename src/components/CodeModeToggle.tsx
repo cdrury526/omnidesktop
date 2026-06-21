@@ -11,6 +11,7 @@ import { pickDirectory } from "../lib/dialog";
 interface Props {
   codeMode: boolean;
   workingDir: string | null;
+  folderMissing?: boolean;
   onCodeModeChange: (on: boolean) => void;
   onWorkingDirChange: (dir: string | null) => void;
 }
@@ -24,6 +25,7 @@ function folderName(path: string): string {
 export function CodeModeToggle({
   codeMode,
   workingDir,
+  folderMissing,
   onCodeModeChange,
   onWorkingDirChange,
 }: Props) {
@@ -51,7 +53,8 @@ export function CodeModeToggle({
         (workingDir ? (
           <Tooltip title={workingDir}>
             <Tag
-              className="folder-chip"
+              className={`folder-chip${folderMissing ? " missing" : ""}`}
+              color={folderMissing ? "warning" : undefined}
               icon={<FolderOpenOutlined />}
               closable
               onClose={() => onWorkingDirChange(null)}

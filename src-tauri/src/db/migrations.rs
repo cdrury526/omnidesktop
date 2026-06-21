@@ -36,6 +36,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "code_mode",
         sql: include_str!("schema/0002_code_mode.sql"),
     },
+    Migration {
+        version: 3,
+        name: "open_tabs",
+        sql: include_str!("schema/0003_open_tabs.sql"),
+    },
 ];
 
 /// Apply every pending migration in order. Returns a contextual error naming the

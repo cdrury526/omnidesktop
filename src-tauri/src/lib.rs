@@ -1,5 +1,6 @@
 mod db;
 mod debug;
+mod fs;
 
 use tauri::Manager;
 
@@ -86,6 +87,7 @@ pub fn run() {
             delete_api_key,
             db::db_execute,
             db::db_select,
+            fs::path_is_dir,
             debug::complete_debug_request,
             debug::save_snapshot
         ])

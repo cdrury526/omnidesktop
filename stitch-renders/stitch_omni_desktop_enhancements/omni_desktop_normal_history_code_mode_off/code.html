@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Omni Desktop - History</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;family=Public+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            DEFAULT: '#4f46e5',
+                            foreground: '#ffffff',
+                            muted: '#eef2ff',
+                        },
+                        surface: {
+                            50: '#f9fafb',
+                            100: '#f3f4f6',
+                            200: '#e5e7eb',
+                            300: '#d1d5db',
+                            900: '#111827',
+                        }
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Inter", "sans-serif"],
+                        "display": ["Inter", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Public Sans", "sans-serif"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .chat-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .chat-scrollbar::-webkit-scrollbar-thumb {
+            background: #e5e7eb;
+            border-radius: 10px;
+        }
+        .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #d1d5db;
+        }
+    </style>
+</head>
+<body class="bg-white text-slate-900 font-body h-screen flex overflow-hidden">
+<!-- SideNavBar (JSON Component 1 Implementation) -->
+<aside class="bg-slate-50 dark:bg-slate-900 h-screen w-14 flex flex-col items-center py-4 space-y-6 z-50 border-r border-slate-200 dark:border-slate-800 transition-colors duration-200">
+<!-- Brand/Avatar Area -->
+<div class="mb-4">
+<div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">O</div>
+</div>
+<!-- Navigation Tabs -->
+<nav class="flex flex-col space-y-4 w-full items-center">
+<!-- Active Tab: History -->
+<button class="w-10 h-10 flex items-center justify-center rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-r-2 border-indigo-600 transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="dns">dns</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="smart_toy">smart_toy</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+</nav>
+<!-- Footer Tab -->
+<div class="mt-auto pb-4">
+<button class="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+</div>
+</aside>
+<!-- History Panel (Expanded) -->
+<section class="w-72 h-screen border-r border-slate-200 flex flex-col bg-slate-50/50">
+<div class="p-4 flex items-center justify-between">
+<h1 class="font-headline font-bold text-slate-900 text-lg">History</h1>
+<button class="p-1.5 hover:bg-slate-100 rounded-md text-slate-500">
+<span class="material-symbols-outlined text-xl" data-icon="search">search</span>
+</button>
+</div>
+<!-- Filter Segmented Control -->
+<div class="px-4 mb-4">
+<div class="flex bg-slate-200/50 p-1 rounded-lg text-xs font-medium">
+<button class="flex-1 py-1.5 rounded-md bg-white shadow-sm text-slate-900">All</button>
+<button class="flex-1 py-1.5 rounded-md text-slate-500 hover:text-slate-700">Code</button>
+</div>
+</div>
+<!-- List of Chronological Cards -->
+<div class="flex-1 overflow-y-auto chat-scrollbar px-3 space-y-2 pb-6">
+<!-- Card 1 -->
+<div class="p-3 bg-white border border-slate-200 rounded-lg hover:border-indigo-200 cursor-pointer transition-colors shadow-sm group">
+<div class="text-sm font-medium text-slate-800 mb-1 group-hover:text-indigo-600 truncate">What is a function in C++</div>
+<div class="text-[11px] text-slate-400">1h ago</div>
+</div>
+<!-- Card 2 -->
+<div class="p-3 bg-white border border-slate-200 rounded-lg hover:border-indigo-200 cursor-pointer transition-colors shadow-sm group">
+<div class="text-sm font-medium text-slate-800 mb-1 group-hover:text-indigo-600 truncate">Explain async Rust</div>
+<div class="text-[11px] text-slate-400">Yesterday</div>
+</div>
+<!-- Card 3 -->
+<div class="p-3 bg-white border border-slate-200 rounded-lg hover:border-indigo-200 cursor-pointer transition-colors shadow-sm group">
+<div class="flex items-center justify-between mb-1">
+<div class="text-sm font-medium text-slate-800 group-hover:text-indigo-600 truncate">Fix MCP connection</div>
+<span class="material-symbols-outlined text-[14px] text-slate-400 bg-slate-50 p-0.5 rounded" data-icon="code">code</span>
+</div>
+<div class="text-[11px] text-slate-400">2 days ago</div>
+</div>
+<!-- More placeholders -->
+<div class="p-3 bg-transparent border border-dashed border-slate-200 rounded-lg opacity-60">
+<div class="text-sm font-medium text-slate-400 mb-1 truncate">How to use Tailwind config</div>
+<div class="text-[11px] text-slate-400">3 days ago</div>
+</div>
+</div>
+</section>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col relative bg-white">
+<!-- TopNavBar (JSON Component 2 Implementation) -->
+<header class="flex justify-between items-center h-14 px-6 border-b border-slate-200 dark:border-slate-800 transition-all duration-200">
+<div class="flex items-center space-x-6 h-full">
+<div class="border-b-2 border-indigo-600 h-full flex items-center px-1">
+<span class="text-sm font-bold text-indigo-600">General Chat</span>
+</div>
+</div>
+<div class="flex items-center space-x-4">
+<!-- Code Mode Toggle (OFF) -->
+<div class="flex items-center space-x-2 mr-2">
+<span class="text-xs font-medium text-slate-500">Code Mode</span>
+<button class="w-8 h-4 bg-slate-200 rounded-full relative transition-colors duration-200 cursor-pointer">
+<div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full shadow-sm"></div>
+</button>
+</div>
+<button class="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="share">share</span>
+<span class="text-sm font-medium">Share</span>
+</button>
+<button class="flex items-center space-x-2 px-4 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+<span class="text-sm font-medium">New Chat</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-slate-200 overflow-hidden ml-2 border border-slate-300">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a person with a clean-cut appearance, set against a soft blurred office background with cool natural lighting. The style is consistent with a high-end corporate or tech profile picture, featuring a neutral color palette and crisp, modern aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoaCWUpKiHE4DO8Bn00jr1UZXcqjGpMD3PNKFf_tf8AyMd7a0r58slZOfgP1UOt-DJkrvVG1fiDieieMOOIFl_507_ZHIU7cxvX2cM8wPdAA_GLpofQctO8MxTL1H5B5OmtK2jus-qfTLg3cr1YMV8hJqdMtSlJ2rzxwuJP6qVjiUJtW6RVlhKd1h8f57woxAVJZvNx_gS5nyqLD-pHqMKs1ezLDyTbY39Fxhu5yO1i2KzsDdUhqlv7afXbxDQ9JXnSIXhoNkEXQs"/>
+</div>
+</div>
+</header>
+<!-- Conversation Canvas -->
+<div class="flex-1 overflow-y-auto chat-scrollbar p-8 flex flex-col items-center">
+<div class="w-full max-w-3xl space-y-8">
+<!-- User Question -->
+<div class="flex flex-col items-end">
+<div class="bg-indigo-50 text-indigo-900 px-4 py-3 rounded-2xl rounded-tr-none max-w-[85%] text-sm leading-relaxed shadow-sm">
+                        Could you explain how functions work in C++ for a beginner? I'm coming from Python and finding the syntax a bit confusing.
+                    </div>
+<span class="text-[10px] text-slate-400 mt-1 mr-2">1h ago</span>
+</div>
+<!-- AI Response -->
+<div class="flex flex-col items-start">
+<div class="flex items-start space-x-3 w-full">
+<div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+<span class="material-symbols-outlined text-sm" data-icon="smart_toy">smart_toy</span>
+</div>
+<div class="flex flex-col space-y-4 flex-1">
+<div class="text-slate-800 text-sm leading-relaxed max-w-[90%]">
+                                In C++, a function is a block of code that performs a specific task. Unlike Python where you just use `def`, C++ requires you to be very explicit about **data types**.
+                                <br/><br/>
+                                Think of it as a machine: you tell it what it produces (return type), what it's called (name), and what it needs to work (parameters).
+                                <br/><br/>
+                                The main differences you'll notice are:
+                                <ul class="list-disc ml-5 mt-2 space-y-1">
+<li>Mandatory semicolon at the end of statements.</li>
+<li>Curly braces `{ }` to define the start and end of the function body.</li>
+<li>Explicit return type (like `int`, `void`, or `double`) must be declared before the function name.</li>
+</ul>
+</div>
+<!-- Illustrative Placeholder Image -->
+<div class="w-full h-48 rounded-xl overflow-hidden border border-slate-100 shadow-sm relative group">
+<img class="w-full h-full object-cover" data-alt="A clean, minimalist 3D conceptual illustration of a software architecture diagram. Cubes representing data flow are connected by glowing violet light paths on a pristine white background. The aesthetic is ultra-modern, professional, and incorporates the indigo and white brand colors of the application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLG-umb7HgOXF9MHjZiIdyn95Y0lj-Pc8KEfWR2FWq8ebZAi5qYWRWNfzFRE0DpPK4_8sZkkJ3SoqI7oTGQcCZOOctJauvzHGqz1OX2xEbtlIfNQPBxQ5yQ1AH2JogAeIsoPkJg0QB_y1Z7RmDZ3KVH8nuIVVbHHNhpMhjMvughxudH54bXxLzJSKuc0Uvp9EhTQscJdSsn48gK5A2wk-B7aPXmUw87KHnbUJsIJWgM8HDZF5PhLkvRRHyPM7cgLVAfVdV3263EkI"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+</div>
+</div>
+</div>
+<span class="text-[10px] text-slate-400 mt-2 ml-11">1h ago</span>
+</div>
+</div>
+</div>
+<!-- Composer Area -->
+<div class="px-8 pb-4 pt-2">
+<div class="max-w-3xl mx-auto">
+<div class="bg-white border border-slate-200 rounded-xl shadow-lg shadow-slate-100 p-2 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+<textarea class="w-full border-none focus:ring-0 text-sm placeholder-slate-400 resize-none p-3" placeholder="Message Omni..." rows="3"></textarea>
+<div class="flex items-center justify-between px-3 pb-2 pt-1">
+<div class="flex items-center space-x-4">
+<!-- Model Picker -->
+<button class="flex items-center space-x-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-600 transition-colors">
+<span class="material-symbols-outlined text-[16px]" data-icon="model_training">model_training</span>
+<span>Claude 3.5 Sonnet</span>
+<span class="material-symbols-outlined text-[14px]" data-icon="expand_more">expand_more</span>
+</button>
+<div class="flex items-center space-x-2 text-slate-400">
+<button class="hover:text-indigo-600 transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="attach_file">attach_file</span>
+</button>
+<button class="hover:text-indigo-600 transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="image">image</span>
+</button>
+</div>
+</div>
+<!-- Send Button -->
+<button class="w-8 h-8 bg-indigo-600 text-white rounded-lg flex items-center justify-center hover:bg-indigo-700 transition-all shadow-md active:scale-95">
+<span class="material-symbols-outlined text-lg" data-icon="arrow_upward">arrow_upward</span>
+</button>
+</div>
+</div>
+<!-- Status Bar -->
+<div class="flex justify-center mt-3">
+<span class="text-[10px] font-medium text-slate-400 tracking-wide uppercase">Press Enter to send • / to see commands</span>
+</div>
+</div>
+</div>
+</main>
+<script>
+        // Micro-interactions for the side nav and elements
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Subtle feedback if needed
+            });
+        });
+
+        // Search bar activation visual
+        const searchBtn = document.querySelector('[data-icon="search"]').parentElement;
+        searchBtn.addEventListener('click', () => {
+            console.log('Search history...');
+        });
+    </script>
+</body></html>

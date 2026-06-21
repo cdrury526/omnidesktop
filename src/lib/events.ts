@@ -44,6 +44,15 @@ export async function getEvents(sinceId = 0, limit = 500): Promise<EventRow[]> {
   );
 }
 
+/** Recent MCP connect attempts/outcomes (newest first). */
+export async function getMcpConnectEvents(limit = 100): Promise<EventRow[]> {
+  return dbSelect<EventRow>(
+    "SELECT id, ts, source, type, conversation_id, data FROM events " +
+      "WHERE type LIKE 'mcp.connect.%' ORDER BY id DESC LIMIT ?",
+    [limit],
+  );
+}
+
 function safeJson(v: unknown): string {
   try {
     return JSON.stringify(v);

@@ -31,6 +31,7 @@ import {
 import { isFormSubmit, isFormCancel, readFormDirty, validateResult, type FormSpec } from "@omni/forms-dsl";
 import { Modal } from "antd";
 import { logEvent, type EventSource } from "../lib/events";
+import { pathIsDir } from "../lib/fs";
 import {
   createConversation,
   getMessages,
@@ -76,15 +77,41 @@ export function useAgentChat({
   // ref keeps the latest values readable from stable turn callbacks.
   const [codeMode, setCodeModeState] = useState(false);
   const [workingDir, setWorkingDirState] = useState<string | null>(null);
+  /** Saved folder path exists on disk — when false, composer is read-only. */
+  const [folderMissing, setFolderMissing] = useState(false);
   const codeModeRef = useRef<{ codeMode: boolean; workingDir: string | null }>({ codeMode: false, workingDir: null });
+  const folderMissingRef = useRef(false);
   useEffect(() => {
     codeModeRef.current = { codeMode, workingDir };
   }, [codeMode, workingDir]);
-  /** The folder to inject this turn, or undefined when code mode is off/unset. */
-  const activeWorkingDir = useCallback(
-    () => (codeModeRef.current.codeMode ? codeModeRef.current.workingDir ?? undefined : undefined),
-    [],
-  );
+  useEffect(() => {
+    folderMissingRef.current = folderMissing;
+  }, [folderMissing]);
+
+  /** Check whether a bound folder is reachable; updates `folderMissing`. */
+  const syncFolderReachable = useCallback(async (dir: string | null, logConvId?: number | null) => {
+    if (!dir) {
+      setFolderMissing(false);
+      return;
+    }
+    const ok = await pathIsDir(dir);
+    setFolderMissing(!ok);
+    if (!ok) {
+      logEvent({
+        source: "system",
+        type: "codemode.folder.missing",
+        conversationId: logConvId ?? conversationId,
+        data: { path: dir },
+      });
+    }
+  }, [conversationId]);
+
+  /** The folder to inject this turn, or undefined when code mode is off/unset/unreachable. */
+  const activeWorkingDir = useCallback(() => {
+    const { codeMode, workingDir } = codeModeRef.current;
+    if (folderMissingRef.current) return undefined;
+    return codeMode ? workingDir ?? undefined : undefined;
+  }, []);
   const flushingRef = useRef(false);
   // Aborts the in-flight turn (Sender's cancel button → runner's result.cancel()).
   const abortRef = useRef<AbortController | null>(null);
@@ -157,17 +184,19 @@ export function useAgentChat({
   const setWorkingDir = useCallback(
     (dir: string | null) => {
       setWorkingDirState(dir);
+      void syncFolderReachable(dir);
       const on = codeModeRef.current.codeMode;
       if (conversationId != null) void persistCodeMode(conversationId, { codeMode: on, workingDir: dir });
       logEvent({ source: "user", type: "codemode.folder", conversationId, data: { hasDir: !!dir } });
     },
-    [conversationId],
+    [conversationId, syncFolderReachable],
   );
 
   const hydrate = useCallback(async (id: number) => {
     const cm = await getCodeMode(id);
     setCodeModeState(cm.codeMode);
     setWorkingDirState(cm.workingDir);
+    await syncFolderReachable(cm.workingDir, id);
     const state = await getConversationState(id);
     if (state) {
       setMessages(displayItemsFromState(state));
@@ -188,7 +217,7 @@ export function useAgentChat({
     setMessages(rows.map((r) => ({ kind: "msg", role: r.role as "user" | "assistant", content: r.content })));
     setFormPending(false);
     setActivation(null);
-  }, [summonPanel, seedToolSeen]);
+  }, [summonPanel, seedToolSeen, syncFolderReachable]);
 
   /** Reset the chat surface (App's "new chat" / deleting the active conversation). */
   const resetChat = useCallback(() => {
@@ -198,6 +227,7 @@ export function useAgentChat({
     setActivation(null);
     setCodeModeState(false);
     setWorkingDirState(null);
+    setFolderMissing(false);
     toolSeenRef.current.clear();
     formDirtyRef.current = false;
   }, []);
@@ -218,7 +248,8 @@ export function useAgentChat({
     formDirtyRef.current = false;
     setCodeModeState(true);
     setWorkingDirState(dir);
-  }, []);
+    void syncFolderReachable(dir);
+  }, [syncFolderReachable]);
 
   const appendDeltaToLastAssistant = useCallback((delta: string) => {
     setMessages((msgs) => {
@@ -246,6 +277,7 @@ export function useAgentChat({
   const runUserTurn = useCallback(
     async (text: string, source: EventSource = "user"): Promise<number | null> => {
       if (!text || busy) return null;
+      if (folderMissingRef.current && codeModeRef.current.workingDir) return null;
       if (!apiKey) { setConnError("Enter your OpenRouter API key first."); return null; }
       if (!model) { setConnError("Pick a model first."); return null; }
       setConnError(null);
@@ -517,6 +549,7 @@ export function useAgentChat({
     activation,
     codeMode,
     workingDir,
+    folderMissing,
     setCodeMode,
     setWorkingDir,
     submit,

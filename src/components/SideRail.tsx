@@ -56,7 +56,7 @@ interface Props {
 function railIcon(icon: ReactNode, badge?: boolean) {
   const node = <span className="rail-menu-icon">{icon}</span>;
   return badge ? (
-    <Badge dot className="rail-badge-wrap">
+    <Badge dot offset={[-1, 1]} className="rail-badge-wrap">
       {node}
     </Badge>
   ) : (

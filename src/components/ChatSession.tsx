@@ -14,6 +14,7 @@ import { Bubble, Sender, ThoughtChain } from "@ant-design/x";
 import { AssistantMarkdown } from "./MarkdownCode";
 import { ModelPicker } from "./ModelPicker";
 import { CodeModeToggle } from "./CodeModeToggle";
+import { FolderMissingNotice } from "./FolderMissingNotice";
 import { AppPane } from "./AppPane";
 import { ChatWelcome } from "./ChatWelcome";
 import { useAgentChat } from "../hooks/useAgentChat";
@@ -71,6 +72,7 @@ export interface SessionMeta {
   workingDir: string | null;
   codeMode: boolean;
   busy: boolean;
+  folderMissing: boolean;
 }
 
 export interface BridgeHandlers {
@@ -83,7 +85,12 @@ export interface BridgeHandlers {
 
 interface Props {
   tabKey: string;
-  active: boolean;
+  /** Render this session in the workspace (single or split pane). */
+  visible: boolean;
+  /** Keyboard / debug-bridge focus within split view. */
+  focused: boolean;
+  splitRole: "primary" | "secondary" | null;
+  onFocusPane: () => void;
   apiKey: string;
   model: string;
   onModelChange: (id: string) => void;
@@ -97,7 +104,10 @@ interface Props {
 
 export function ChatSession({
   tabKey,
-  active,
+  visible,
+  focused,
+  splitRole,
+  onFocusPane,
   apiKey,
   model,
   onModelChange,
@@ -122,9 +132,11 @@ export function ChatSession({
   });
   const {
     messages, input, setInput, busy, queued, setQueued, formPending, activation,
-    codeMode, workingDir, setCodeMode, setWorkingDir,
+    codeMode, workingDir, folderMissing, setCodeMode, setWorkingDir,
     submit, cancelTurn, hydrate, startProjectChat, onAppContext, onPaneClose,
   } = chat;
+
+  const composerBlocked = folderMissing && !!workingDir;
 
   // Hydrate the bound conversation (or seed a project-bound new chat) once.
   useEffect(() => {
@@ -135,8 +147,8 @@ export function ChatSession({
 
   // Report meta up for the tab label / spinner.
   useEffect(() => {
-    onMeta(tabKey, { conversationId, workingDir, codeMode, busy });
-  }, [tabKey, conversationId, workingDir, codeMode, busy, onMeta]);
+    onMeta(tabKey, { conversationId, workingDir, codeMode, busy, folderMissing });
+  }, [tabKey, conversationId, workingDir, codeMode, busy, folderMissing, onMeta]);
 
   // Register debug-bridge handlers (read live via a ref so identities stay
   // stable — App dispatches bridge calls to the focused tab's handlers).
@@ -211,12 +223,24 @@ export function ChatSession({
   }, [messages, queued, busy]);
 
   return (
-    <section className={`chat-session ${active ? "active" : ""}`} aria-hidden={!active}>
+    <section
+      className={[
+        "chat-session",
+        visible && "visible",
+        focused && "focused",
+        splitRole && `split-${splitRole}`,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      aria-hidden={!visible}
+      onPointerDown={onFocusPane}
+    >
       <div className="session-main">
         <div className="session-bar">
           <CodeModeToggle
             codeMode={codeMode}
             workingDir={workingDir}
+            folderMissing={folderMissing}
             onCodeModeChange={setCodeMode}
             onWorkingDirChange={setWorkingDir}
           />
@@ -227,17 +251,26 @@ export function ChatSession({
         <section className="messages">
           {bubbleItems && bubbleItems.length > 0 ? (
             <Bubble.List items={bubbleItems} role={roles} autoScroll style={{ height: "100%" }} />
+          ) : composerBlocked ? (
+            <div className="chat-welcome folder-missing-empty">
+              <FolderMissingNotice path={workingDir!} onPickFolder={setWorkingDir} />
+            </div>
           ) : (
             <ChatWelcome onPick={submit} />
           )}
         </section>
 
         <section className="composer">
+          {composerBlocked && (bubbleItems?.length ?? 0) > 0 && (
+            <FolderMissingNotice path={workingDir!} onPickFolder={setWorkingDir} />
+          )}
           <Sender
             value={input}
             onChange={setInput}
             onSubmit={submit}
             loading={busy}
+            disabled={composerBlocked}
+            readOnly={composerBlocked}
             onCancel={cancelTurn}
             onKeyDown={(e) => {
               if (busy && e.key === "Enter" && !e.shiftKey) {
@@ -248,15 +281,17 @@ export function ChatSession({
             }}
             autoSize={{ minRows: 1, maxRows: 6 }}
             placeholder={
-              !server
-                ? "Connect a server in Settings to start"
-                : busy
-                  ? "Agent is working — Enter queues, ✕ cancels"
-                  : formPending
-                    ? "Form open — your message will queue (Enter)"
-                    : codeMode
-                      ? "Ask Omni to write code, refactor, or debug…"
-                      : "Message… (Enter to send)"
+              composerBlocked
+                ? "Project folder missing — choose a folder above to send messages"
+                : !server
+                  ? "Connect a server in Settings to start"
+                  : busy
+                    ? "Agent is working — Enter queues, ✕ cancels"
+                    : formPending
+                      ? "Form open — your message will queue (Enter)"
+                      : codeMode
+                        ? "Ask Omni to write code, refactor, or debug…"
+                        : "Message… (Enter to send)"
             }
           />
           <div className="composer-footer">
