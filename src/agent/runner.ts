@@ -216,6 +216,59 @@ export async function openForm({
   return streamText(result, onTextDelta);
 }
 
+// Self-repair: when the model *describes* showing a form instead of emitting the
+// tool call (a known intermittent failure on some models), we detect it and
+// re-prompt with the tool forced. Conservative on purpose — both an action
+// phrase AND a form/input noun must be present, or we don't intervene.
+const ACTION_INTENT_RE = /\b(i'?ll|i will|let me|i can|here'?s|going to|one moment|pop (it|that) up)\b/i;
+const FORM_INTENT_RE = /\b(form|fill (it|this|that|in)|details|sign[ -]?up|sign you up|subscri|collect|fields?|below)\b/i;
+
+/** True if the last assistant turn promised a form but no tool call happened. */
+export function describedButDidntCall(state: unknown): boolean {
+  const items = displayItemsFromState(state);
+  const last = items[items.length - 1];
+  if (!last || last.kind !== "msg" || last.role !== "assistant") return false;
+  return ACTION_INTENT_RE.test(last.content) && FORM_INTENT_RE.test(last.content);
+}
+
+export interface RepairArgs {
+  apiKey: string;
+  model: string;
+  toolName?: string;
+  state: StateStore;
+  tools: McpTools;
+  onTextDelta: (delta: string) => void;
+}
+
+/** Re-prompt the model with the tool forced, after it described instead of calling. */
+export async function repairToolCall({
+  apiKey,
+  model,
+  toolName = "request_user_input",
+  state,
+  tools,
+  onTextDelta,
+}: RepairArgs): Promise<string> {
+  const or = makeClient(apiKey);
+  const result = or.callModel({
+    model,
+    instructions: SYSTEM_PROMPT,
+    // A developer message — not shown in the transcript (display only renders
+    // user/assistant) — nudges; tool_choice forces the call.
+    input: [
+      {
+        role: "developer",
+        content: `You described showing a form but did not call the tool. Call \`${toolName}\` now with the fields you described.`,
+      },
+    ] as never,
+    state: state as never,
+    tools,
+    toolChoice: { type: "function", name: toolName } as never,
+    stopWhen: stepCountIs(2),
+  });
+  return streamText(result, onTextDelta);
+}
+
 export interface ResumeTurnArgs {
   apiKey: string;
   model: string;

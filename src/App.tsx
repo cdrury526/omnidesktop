@@ -12,6 +12,8 @@ import {
   runTurn,
   resumeTurn,
   openForm,
+  repairToolCall,
+  describedButDidntCall,
   displayItemsFromState,
   pendingHitlCall,
   type DisplayItem,
@@ -278,9 +280,16 @@ export default function App() {
       const state = conversationStateAccessor(convId);
       try {
         await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant });
+        let st = await getConversationState(convId);
+        // Self-repair: if the model described a form but didn't call the tool,
+        // re-prompt once with the tool forced (only when the forms tool exists).
+        if (server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
+          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant });
+          st = await getConversationState(convId);
+        }
         // Reconcile with persisted state (surfaces tool cards). The panel, if a
         // form paused, was already opened by onAutoSummon mid-turn.
-        applyState(await getConversationState(convId));
+        applyState(st);
       } catch (e) {
         setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
