@@ -246,6 +246,18 @@ button:disabled { opacity: 0.55; cursor: default; }
 .tool-card-status { font-size: 0.8em; }
 .tool-card.cancelled { border-color: light-dark(#9ca3af, #6b7280); opacity: 0.8; }
 
+/* Empty-chat onboarding (Welcome + Prompts). */
+.chat-welcome {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 8px;
+}
+
 /* Tool-call steps in the transcript (ThoughtChain). */
 .tool-chain { width: 100%; }
 .tool-detail {
