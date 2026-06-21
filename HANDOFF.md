@@ -291,6 +291,32 @@ All verified headlessly via the bridge unless noted.
   `tool.call`/`tool.result` events tied to `conversation_state` by `callId`.
   Read the timeline via `/events`. This is the "what happened and who did it" log.
 
+## Workspace shell — DONE through Phase 2 (rail, projects, live multi-tab)
+
+The chat→coding workspace is being built in phases (Stitch renders in
+`stitch-renders/`). Shipped so far:
+- **Phase 1** (`c23192d`) — left **icon rail** (History/Projects live;
+  Tools/Agents/Commands stubbed; Settings) + in-rail **panels**. Projects panel
+  groups code chats by working folder with a per-project `+`. Header relocated:
+  model picker → composer footer, API key + MCP server → Settings panel.
+- **Phase 2** (`ae6382b`) — **live multi-tab**. Each open tab is its own mounted
+  `ChatSession` (`src/components/ChatSession.tsx`) with an independent
+  `useAgentChat`; **hidden tabs stay mounted so background turns keep streaming**
+  (verified). VS Code-style `TabBar`. `App.tsx` is now the shell: open-tabs
+  state, debug bridge routed to the focused tab via a per-session handler
+  registry, tab labels from session `meta` + the conversations list. The MCP
+  slide-out pane is now **per-session** (was app-global).
+
+**Next — Phase 3: split view** — render two of the already-live sessions
+side-by-side (the architecture makes this mostly a layout change: two columns,
+each an active `ChatSession`, each with its own composer + MCP pane).
+
+**Direction (not yet built): MCP apps render INLINE in the transcript**, not the
+side pane — the user wants the rendered app embedded per tool card. Keep this in
+mind when touching `AppPane`/`ChatSession` so the pane isn't entrenched; the
+`activation` + bridge lifecycle should be movable into an inline card. (See the
+existing "Inline-panel embedding" backlog item.)
+
 ## Backlog
 
 - **Streaming smoothness (optional polish)** — streaming works (see correction
