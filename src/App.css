@@ -43,7 +43,6 @@ html, body, #root {
 
 .chat-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .chat-header h1 { font-size: 1.3rem; margin: 0 8px 0 0; }
-.subtitle { color: var(--muted); font-size: 0.85rem; }
 
 .status-line { color: var(--muted); font-size: 0.82rem; margin: 6px 0; }
 
@@ -80,41 +79,10 @@ html, body, #root {
 
 /* ---- chat ---- */
 .messages { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 8px 2px; }
-.bubble {
-  max-width: 80%;
-  padding: 9px 13px;
-  border-radius: 14px;
-  font-size: 0.92rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-.bubble.assistant { align-self: flex-start; background: var(--bg-soft); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 
 .composer { display: flex; gap: 8px; align-items: flex-end; padding-top: 8px; }
-.composer textarea {
-  flex: 1;
-  resize: none;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-soft);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.92rem;
-}
 
 .connect-row { display: flex; gap: 8px; margin: 16px 0 8px; }
-.connect-row input {
-  flex: 1;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-soft);
-  color: var(--text);
-  font-size: 0.9rem;
-}
 button {
   padding: 9px 14px;
   border: 1px solid var(--border);
@@ -137,43 +105,6 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 
 .messages { overflow-y: auto; margin-top: 8px; }
-.hint { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
-
-.tool-list { list-style: none; padding: 0; display: grid; gap: 10px; }
-.tool-list li { display: flex; flex-direction: column; gap: 2px; }
-.tool-list small { color: var(--muted); padding-left: 2px; }
-
-.tool-btn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  background: var(--bg-soft);
-  color: var(--text);
-  border: 1px solid var(--border);
-  text-align: left;
-}
-.tool-btn.has-ui { border-color: var(--accent); }
-.tool-name { font-weight: 500; }
-
-.ui-badge {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--accent);
-  color: #fff;
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-
-.context-log { margin-top: 16px; font-size: 0.8rem; }
-.context-log pre {
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
-  overflow-x: auto;
-}
 
 /* ---- Slide-out app pane (Pane 2) ---- */
 .app-pane {
@@ -224,28 +155,6 @@ button:disabled { opacity: 0.55; cursor: default; }
 }
 .app-pane-note.error { color: light-dark(#b91c1c, #f87171); padding: 16px; text-align: center; }
 
-/* Tool-call cards in the transcript (the agent's tool interactions). */
-.tool-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  max-width: 80%;
-  padding: 6px 12px;
-  margin: 2px 0;
-  border: 1px solid var(--border, #d1d5db);
-  border-radius: 999px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  background: light-dark(#f9fafb, #1f1f1f);
-}
-.tool-card-name { font-family: var(--font-mono, monospace); color: var(--text, inherit); }
-.tool-card.pending { border-color: light-dark(#f59e0b, #b45309); }
-.tool-card.done { border-color: light-dark(#10b981, #059669); }
-.tool-card.error { border-color: light-dark(#ef4444, #b91c1c); }
-.tool-card-status { font-size: 0.8em; }
-.tool-card.cancelled { border-color: light-dark(#9ca3af, #6b7280); opacity: 0.8; }
-
 /* Empty-chat onboarding (Welcome + Prompts). */
 .chat-welcome {
   height: 100%;
@@ -276,11 +185,15 @@ button:disabled { opacity: 0.55; cursor: default; }
 
 /* Queued messages — typed while the agent was busy / a form was open. */
 .bubble.queued {
-  opacity: 0.6;
-  border: 1px dashed var(--border, #d1d5db);
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 80%;
+  padding: 6px 12px;
+  border: 1px dashed var(--border, #d1d5db);
+  border-radius: 14px;
+  font-size: 0.92rem;
+  opacity: 0.6;
 }
 .queued-text { flex: 1; }
 .queued-tag {

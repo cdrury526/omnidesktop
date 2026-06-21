@@ -1,5 +1,11 @@
 # Ant Design + Ant Design X Adoption Plan
 
+> **STATUS: IMPLEMENTED (in review).** All phases landed as stacked PRs
+> `feat/antd-x-phase-{0,1,2,3,4,6,7}` (#10–#16), each bridge-verified. Phase 5
+> (Conversations sidebar) was left as the documented optional item. Known
+> follow-up: `tauri-fetch` buffers responses, so streaming/cancel aren't live
+> (see HANDOFF). The phase notes below are kept as the build record.
+
 A phased plan to replace the hand-rolled chat UI with the Ant Design X chat
 primitives and the hand-rolled form inputs with Ant Design components — fixing
 the concrete bugs (no autoscroll, broken native datepicker) along the way —
