@@ -14,17 +14,33 @@ Status: **working end-to-end and pushed to GitHub** (`cdrury526/omnidesktop`).
 Verified live: model picker, keyring, MCP connect, agent tool-calling,
 interactive forms (HITL) with durable pause/resume, message queuing, cancel.
 
-## ▶ NEXT TASK — `ANTD_X_ADOPTION_PLAN.md`
+## ▶ STATUS — Ant Design X adoption DONE (in review)
 
-The next body of work is **adopting Ant Design X for the chat UI and antd for the
-form inputs** — see **`ANTD_X_ADOPTION_PLAN.md`** at the repo root. It's a phased,
-bridge-verified plan (start at Phase 0). It fixes two reported bugs (no
-autoscroll; broken native datepicker) and replaces the hand-rolled chat with
-`Bubble.List` / `XMarkdown` / `Sender` / `ThoughtChain` / `Welcome`+`Prompts`,
-keeping the `@openrouter/agent` loop, MCP Apps sandbox, persistence, and
-observability untouched. Use the `x-components`, `x-markdown`, and `antd` skills
-(all in `.claude/skills/`), and verify each phase with the **debug bridge** (the
-`omni-debug-bridge` skill) before moving on.
+`ANTD_X_ADOPTION_PLAN.md` is **implemented**, one stacked PR per phase
+(`feat/antd-x-phase-{0,1,2,3,4,6,7}` → PRs #10–#16), each bridge-verified before
+the next. The chat is now `Bubble.List` + `XMarkdown` + `Sender` + `ThoughtChain`
++ `Welcome`/`Prompts` under `XProvider`; the form inputs are antd (the native
+datepicker bug is fixed). The `@openrouter/agent` loop, MCP Apps sandbox,
+persistence, and observability are untouched. The two reported bugs (no
+autoscroll; broken datepicker) are fixed.
+
+What landed per phase: **0** theming/`XProvider` + React-19 patch; **1**
+`Bubble.List`/`XMarkdown`; **2** `Sender` + real turn cancel (AbortSignal →
+`result.cancel()`); **3** `ThoughtChain` tool cards; **4** `Welcome`+`Prompts`
+empty state; **6** antd form inputs (servers/forms); **7** extracted
+`useAgentChat` (App.tsx back under the 600-line cap) + dead-CSS/doc cleanup.
+
+**Known limitation (worth a follow-up):** the Rust-routed fetch
+(`src/lib/tauri-fetch.ts`) **buffers the whole response** — confirmed by polling
+the live bubble over the bridge (text stays empty, then lands at once). So chat
+"streaming" isn't token-by-token and **turn cancel can't visibly shorten
+generation** (the abort is wired correctly; the transport just doesn't stream).
+Real streaming needs `tauri-fetch` / the Rust http plugin to stream the body.
+
+Verification gotcha: the model must be **connected to an MCP server** (Connect
+button / bridge `/connect`) for turns to behave normally; HMR also leaves stale
+`uncaught` events in the bridge log mid-edit — confirm against the *served*
+source + `tsc` before trusting them.
 
 ## Run / verify
 
@@ -47,7 +63,9 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 
 | Area | File |
 |------|------|
-| Host shell (chat, model/key/server, persistence wiring) | `src/App.tsx` |
+| Host shell (connection, model/key, conversation list, render) | `src/App.tsx` |
+| **Chat session hook** (transcript, composer, turn/HITL/queue/cancel logic) | `src/hooks/useAgentChat.ts` |
+| Empty-state onboarding (`Welcome` + `Prompts`) | `src/components/ChatWelcome.tsx` |
 | Slide-out MCP App pane (bridge lifecycle) | `src/components/AppPane.tsx` |
 | Searchable history drawer (Ant) | `src/components/HistoryDrawer.tsx` |
 | Model picker (Ant Select over OpenRouter catalog) | `src/components/ModelPicker.tsx` |
@@ -85,8 +103,7 @@ Gated to dev builds (`#[cfg(debug_assertions)]` + `import.meta.env.DEV`).
 ## Conventions / rules
 
 - **No source file over 600 lines.** If a file approaches it, split by concern.
-  `App.tsx` is now **683 — over the cap**; extracting `useAgentChat` is part of
-  `ANTD_X_ADOPTION_PLAN.md` Phase 7 (the chat refactor naturally shrinks it).
+  (`App.tsx` was 683; Phase 7 extracted `useAgentChat` → App.tsx ~446, hook ~470.)
 - **Match surrounding style.** Comment density, naming, and idiom already vary
   by file — follow the file you're in.
 - **Secrets never cross into the webview.** API key → keyring (Rust); DB and any
@@ -236,10 +253,12 @@ All verified headlessly via the bridge unless noted.
 
 ## Backlog
 
-- **`ANTD_X_ADOPTION_PLAN.md` — the next major effort** (see top). Includes the
-  `useAgentChat` extraction (Phase 7) to get `App.tsx` back under 600 lines.
+- **Real streaming + responsive cancel** — `tauri-fetch` buffers the whole
+  response (see the status note up top), so chat doesn't stream token-by-token
+  and cancel can't shorten generation. Make the Rust http path stream the body.
 - Inline-panel embedding in the transcript (cards currently link to the side
-  pane; the chosen UX is the rendered app inline per card).
+  pane; the chosen UX is the rendered app inline per card). `ThoughtChain` now
+  shows the call args/result inline — the live form is still the side pane.
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference
   the earlier result) — built + headless-verified, not yet eyeballed live.
 - Turso sync · production sandbox sidecar · MCP server manager UI · conversation
