@@ -4,8 +4,8 @@
  * on with no folder yet immediately opens the native picker. State + persistence
  * live in `useAgentChat`; this is presentation + the picker call.
  */
-import { Switch, Tooltip } from "antd";
-import { FolderOpenOutlined, CloseOutlined } from "@ant-design/icons";
+import { Button, Switch, Tag, Tooltip } from "antd";
+import { FolderOpenOutlined } from "@ant-design/icons";
 import { pickDirectory } from "../lib/dialog";
 
 interface Props {
@@ -49,24 +49,27 @@ export function CodeModeToggle({
       />
       {codeMode &&
         (workingDir ? (
-          <span className="code-folder">
-            <Tooltip title={workingDir}>
-              <button className="folder-chip" onClick={pick}>
-                <FolderOpenOutlined /> {folderName(workingDir)}
-              </button>
-            </Tooltip>
-            <button
-              className="folder-clear"
-              title="Clear working folder"
-              onClick={() => onWorkingDirChange(null)}
+          <Tooltip title={workingDir}>
+            <Tag
+              className="folder-chip"
+              icon={<FolderOpenOutlined />}
+              closable
+              onClose={() => onWorkingDirChange(null)}
+              onClick={pick}
             >
-              <CloseOutlined />
-            </button>
-          </span>
+              {folderName(workingDir)}
+            </Tag>
+          </Tooltip>
         ) : (
-          <button className="folder-chip empty" onClick={pick}>
-            <FolderOpenOutlined /> Choose folder
-          </button>
+          <Button
+            type="dashed"
+            size="small"
+            className="folder-chip empty"
+            icon={<FolderOpenOutlined />}
+            onClick={pick}
+          >
+            Choose folder
+          </Button>
         ))}
     </div>
   );
