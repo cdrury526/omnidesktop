@@ -30,12 +30,18 @@ What landed per phase: **0** theming/`XProvider` + React-19 patch; **1**
 empty state; **6** antd form inputs (servers/forms); **7** extracted
 `useAgentChat` (App.tsx back under the 600-line cap) + dead-CSS/doc cleanup.
 
-**Known limitation (worth a follow-up):** the Rust-routed fetch
-(`src/lib/tauri-fetch.ts`) **buffers the whole response** — confirmed by polling
-the live bubble over the bridge (text stays empty, then lands at once). So chat
-"streaming" isn't token-by-token and **turn cancel can't visibly shorten
-generation** (the abort is wired correctly; the transport just doesn't stream).
-Real streaming needs `tauri-fetch` / the Rust http plugin to stream the body.
+**Streaming works (correction).** An earlier note here claimed `tauri-fetch`
+buffered the whole response — that was **wrong**, an artifact of the debug
+bridge's `/dom` `text` field reading empty for live-rendering nodes (the same
+field reads ThoughtChain titles as empty too). Verified by polling the streaming
+bubble's **rendered height** instead: it climbs incrementally (e.g. 158→291→382→
+571px over ~3s) as deltas arrive. The whole path streams — `@tauri-apps/plugin-http`
+yields a chunked `ReadableStream`, and `@openrouter/sdk` consumes it via
+`getReader()` with `stream: true` + SSE (no `.text()`/`.json()` buffering). Turn
+**cancel is responsive too** — aborts ~0.36s after the click *during* active
+streaming. The only sluggish case is cancelling during **time-to-first-token**
+(the model's pre-generation latency, ~5s with `deepseek-v4-flash`), where there's
+no stream to interrupt yet; that TTFT is provider/model latency, not our code.
 
 Verification gotcha: the model must be **connected to an MCP server** (Connect
 button / bridge `/connect`) for turns to behave normally; HMR also leaves stale
@@ -253,9 +259,10 @@ All verified headlessly via the bridge unless noted.
 
 ## Backlog
 
-- **Real streaming + responsive cancel** — `tauri-fetch` buffers the whole
-  response (see the status note up top), so chat doesn't stream token-by-token
-  and cancel can't shorten generation. Make the Rust http path stream the body.
+- **Streaming smoothness (optional polish)** — streaming works (see correction
+  up top); deltas arrive in bursts, so the bubble grows in chunks rather than
+  per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
+  reduce time-to-first-token with a snappier model. Not a bug.
 - Inline-panel embedding in the transcript (cards currently link to the side
   pane; the chosen UX is the rendered app inline per card). `ThoughtChain` now
   shows the call args/result inline — the live form is still the side pane.
