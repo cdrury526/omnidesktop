@@ -18,7 +18,8 @@ import {
   deleteConversation,
   type ConversationRow,
 } from "./lib/db";
-import { PlusOutlined } from "@ant-design/icons";
+import { Button } from "antd";
+import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import "./App.css";
 
 const RAIL_TITLES: Record<RailSection, string> = {
@@ -311,9 +312,13 @@ export default function App() {
         <aside className="rail-panel">
           <header className="panel-header">
             <span className="panel-title">{RAIL_TITLES[railSection]}</span>
-            <button className="panel-close" onClick={() => setRailSection(null)} aria-label="Close panel">
-              ✕
-            </button>
+            <Button
+              className="panel-close"
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={() => setRailSection(null)}
+              aria-label="Close panel"
+            />
           </header>
           {railSection === "history" && (
             <HistoryPanel
@@ -358,9 +363,9 @@ export default function App() {
         <header className="chat-header">
           <h1>Omni Desktop</h1>
           <div className="header-actions">
-            <button className="new-chat-btn" onClick={newBlankTab}>
-              <PlusOutlined /> New chat
-            </button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={newBlankTab}>
+              New chat
+            </Button>
           </div>
         </header>
 
