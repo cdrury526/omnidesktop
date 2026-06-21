@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { AutoComplete, Input, Modal } from "antd";
+import { Bubble } from "@ant-design/x";
+import { XMarkdown } from "@ant-design/x-markdown";
 import {
   connectToServer,
   callTool,
@@ -122,13 +124,6 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const [activation, setActivation] = useState<ToolCallInfo | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  // Keep the transcript pinned to the newest message. Phase 0 shim — covers
-  // every message change (new turns, hydration, queue), not just stream deltas.
-  // Removed once Bubble.List (Phase 1) provides native autoscroll.
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, queued]);
   // The latest server, readable from stable callbacks without re-binding them.
   const serverRef = useRef<ServerInfo | null>(null);
   useEffect(() => {
@@ -283,7 +278,6 @@ export default function App() {
       }
       return next;
     });
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, []);
 
   const setAssistantError = useCallback((msg: string) => {
@@ -540,6 +534,90 @@ export default function App() {
 
   const toolCount = server ? server.tools.size : 0;
 
+  // Per-role rendering for Bubble.List. Stable reference (the skill warns inline
+  // role objects reset typing/animation). Assistant content goes through
+  // XMarkdown (streaming-safe); user stays plain text; tool/queued reuse the
+  // existing card markup until Phases 3/2 upgrade them.
+  const roles = useMemo(
+    () => ({
+      user: {
+        placement: "end" as const,
+        contentRender: (content: unknown) => (
+          <div className="bubble-user-text">{String(content ?? "")}</div>
+        ),
+      },
+      assistant: {
+        placement: "start" as const,
+        contentRender: (content: unknown, info: { status?: string }) => (
+          <XMarkdown
+            content={String(content ?? "")}
+            streaming={{ hasNextChunk: info?.status === "loading" }}
+          />
+        ),
+      },
+      tool: {
+        placement: "start" as const,
+        variant: "borderless" as const,
+        contentRender: (content: unknown) => {
+          const t = content as Extract<DisplayItem, { kind: "tool" }>;
+          return (
+            <div className={`tool-card ${t.status}`}>
+              <span className="tool-card-icon">🔧</span>
+              <span className="tool-card-name">{t.name}</span>
+              <span className="tool-card-status">
+                {t.status === "pending" && "· awaiting input"}
+                {t.status === "done" && "· done"}
+                {t.status === "error" && "· error"}
+                {t.status === "cancelled" && "· cancelled"}
+              </span>
+            </div>
+          );
+        },
+      },
+      queued: {
+        placement: "end" as const,
+        variant: "borderless" as const,
+        contentRender: (content: unknown) => {
+          const q = content as { text: string; index: number };
+          return (
+            <div className="bubble queued">
+              <span className="queued-text">{q.text}</span>
+              <span className="queued-tag">queued</span>
+              <button
+                className="queued-remove"
+                title="Remove from queue"
+                onClick={() => setQueued((qs) => qs.filter((_, j) => j !== q.index))}
+              >
+                ✕
+              </button>
+            </div>
+          );
+        },
+      },
+    }),
+    [],
+  );
+
+  // The transcript (messages + queued) mapped to Bubble.List items. The last
+  // assistant bubble streams while busy (skeleton until the first delta lands).
+  const bubbleItems = useMemo(() => {
+    const items = messages.map((m, i) => {
+      if (m.kind === "tool") return { key: `m${i}`, role: "tool", content: m };
+      const streaming = m.role === "assistant" && i === messages.length - 1 && busy;
+      return {
+        key: `m${i}`,
+        role: m.role,
+        content: m.content,
+        streaming,
+        loading: streaming && !m.content,
+      };
+    });
+    queued.forEach((text, index) =>
+      items.push({ key: `q${index}`, role: "queued", content: { text, index } } as never),
+    );
+    return items as ComponentProps<typeof Bubble.List>["items"];
+  }, [messages, queued, busy]);
+
   return (
     <div className="layout">
       <main className="chat-pane">
@@ -603,45 +681,21 @@ export default function App() {
           </button>
         </section>
 
-        <section className="messages" ref={scrollRef}>
-          {messages.length === 0 && (
+        <section className="messages">
+          {bubbleItems && bubbleItems.length > 0 ? (
+            <Bubble.List
+              items={bubbleItems}
+              role={roles}
+              autoScroll
+              style={{ height: "100%" }}
+            />
+          ) : (
             <p className="hint">
               Pick a model, paste your OpenRouter key, connect an MCP server, then
               chat. When the model calls a tool that has a UI, the panel slides out
               automatically.
             </p>
           )}
-          {messages.map((m, i) =>
-            m.kind === "tool" ? (
-              <div key={i} className={`tool-card ${m.status}`}>
-                <span className="tool-card-icon">🔧</span>
-                <span className="tool-card-name">{m.name}</span>
-                <span className="tool-card-status">
-                  {m.status === "pending" && "· awaiting input"}
-                  {m.status === "done" && "· done"}
-                  {m.status === "error" && "· error"}
-                  {m.status === "cancelled" && "· cancelled"}
-                </span>
-              </div>
-            ) : (
-              <div key={i} className={`bubble ${m.role}`}>
-                {m.content || (busy && i === messages.length - 1 ? "…" : "")}
-              </div>
-            ),
-          )}
-          {queued.map((q, i) => (
-            <div key={`q${i}`} className="bubble user queued">
-              <span className="queued-text">{q}</span>
-              <span className="queued-tag">queued</span>
-              <button
-                className="queued-remove"
-                title="Remove from queue"
-                onClick={() => setQueued((qs) => qs.filter((_, j) => j !== i))}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
         </section>
 
         <section className="composer">
