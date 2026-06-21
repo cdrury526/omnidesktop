@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { Conversations, type ConversationItemType } from "@ant-design/x";
 import { Empty, Input } from "antd";
-import { MessageOutlined, SearchOutlined } from "@ant-design/icons";
+import { MessageOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
 import { ConversationLabel } from "./ConversationLabel";
 import { deleteConversationMenu } from "./conversationMenu";
@@ -44,12 +44,13 @@ export function HistoryPanel({ conversations, activeId, onSelect, onDelete }: Pr
 
   return (
     <div className="panel-body">
-      <Input
+      <Input.Search
         allowClear
-        prefix={<SearchOutlined />}
+        enterButton={false}
         placeholder="Search conversations…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
+        onSearch={setQuery}
       />
       {items.length === 0 ? (
         <Empty

@@ -7,7 +7,7 @@
  */
 import { useMemo } from "react";
 import { Conversations, type ConversationItemType } from "@ant-design/x";
-import { Empty, Tooltip } from "antd";
+import { Badge, Empty, Tooltip } from "antd";
 import { CodeOutlined, FolderOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
 import { ConversationLabel } from "./ConversationLabel";
@@ -90,7 +90,12 @@ export function ProjectsPanel({
               <span className="project-label">
                 <FolderOutlined />
                 <span className="project-name">{folderName(group)}</span>
-                <span className="project-count">{groupInfo.data.length}</span>
+                <Badge
+                  count={groupInfo.data.length}
+                  size="small"
+                  color="default"
+                  className="project-count"
+                />
                 <Tooltip title="New chat in this project">
                   <PlusOutlined
                     className="project-add"

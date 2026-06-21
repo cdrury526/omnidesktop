@@ -259,23 +259,14 @@ html, body, #root {
   background: var(--bg);
   border-right: 1px solid var(--border);
 }
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.rail-panel-header {
+  flex-shrink: 0;
   padding: 14px 14px 10px;
   border-bottom: 1px solid var(--border);
 }
-.panel-title { font-size: 0.95rem; font-weight: 600; }
-.rail-panel .panel-close.ant-btn {
-  color: var(--muted);
+.rail-panel-header .ant-typography {
   font-size: 0.95rem;
-  padding: 2px 6px;
-  height: auto;
-  border: none;
-  box-shadow: none;
 }
-.rail-panel .panel-close.ant-btn:hover { color: var(--text); background: transparent; }
 .panel-body {
   flex: 1;
   min-height: 0;
@@ -300,31 +291,20 @@ html, body, #root {
   gap: 7px;
   font-size: 0.88rem;
 }
-.project-count {
+.project-count .ant-badge-count {
   color: var(--muted);
-  font-size: 0.75rem;
   background: var(--bg-soft);
-  border-radius: 10px;
-  padding: 0 7px;
+  box-shadow: none;
 }
 .project-add { color: var(--muted); }
 .project-add:hover { color: var(--accent); }
 
 /* ---- settings panel ---- */
-.settings-panel { gap: 18px; }
-.settings-form .ant-form-item { margin-bottom: 18px; }
 .settings-form .ant-form-item-label > label {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--muted);
 }
-.settings-form .ant-form-item-control-input-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.settings-status { font-size: 0.78rem; color: var(--muted); }
-.settings-error { font-size: 0.78rem; color: light-dark(#b91c1c, #f87171); }
 
 /* ---- header actions ---- */
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
@@ -381,10 +361,6 @@ html, body, #root {
   flex: 1;
   min-width: 0;
 }
-.key-status { font-size: 0.75rem; color: var(--muted); }
-.key-status.stored { color: light-dark(#15803d, #4ade80); }
-.key-status.unsaved { color: light-dark(#a16207, #fbbf24); }
-
 /* ---- chat ---- */
 .messages { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 8px 2px; }
 

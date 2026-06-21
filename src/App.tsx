@@ -18,7 +18,7 @@ import {
   deleteConversation,
   type ConversationRow,
 } from "./lib/db";
-import { Button } from "antd";
+import { Button, Flex, Typography } from "antd";
 import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import "./App.css";
 
@@ -310,16 +310,17 @@ export default function App() {
 
       {railSection && (
         <aside className="rail-panel">
-          <header className="panel-header">
-            <span className="panel-title">{RAIL_TITLES[railSection]}</span>
+          <Flex className="rail-panel-header" align="center" justify="space-between">
+            <Typography.Title level={5} style={{ margin: 0 }}>
+              {RAIL_TITLES[railSection]}
+            </Typography.Title>
             <Button
-              className="panel-close"
               type="text"
               icon={<CloseOutlined />}
               onClick={() => setRailSection(null)}
               aria-label="Close panel"
             />
-          </header>
+          </Flex>
           {railSection === "history" && (
             <HistoryPanel
               conversations={conversations}
@@ -363,7 +364,7 @@ export default function App() {
         <header className="chat-header">
           <h1>Omni Desktop</h1>
           <div className="header-actions">
-            <Button type="primary" icon={<PlusOutlined />} onClick={newBlankTab}>
+            <Button type="primary" ghost icon={<PlusOutlined />} onClick={newBlankTab}>
               New chat
             </Button>
           </div>
