@@ -43,7 +43,12 @@ function Code({ block, lang, className, children }: CodeProps) {
     <CodeHighlighter
       lang={lang}
       className="md-code-card"
-      highlightProps={{ style: theme === "dark" ? oneDark : oneLight }}
+      highlightProps={{
+        style: theme === "dark" ? oneDark : oneLight,
+        // The Prism theme's inline padding is tight against the card edges;
+        // give the code body more horizontal breathing room.
+        customStyle: { margin: 0, padding: "14px 18px" },
+      }}
     >
       {textOf(children)}
     </CodeHighlighter>
