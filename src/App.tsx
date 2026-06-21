@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "
 import { AutoComplete, Input } from "antd";
 import { Bubble, Sender, ThoughtChain } from "@ant-design/x";
 import { XMarkdown } from "@ant-design/x-markdown";
+import { markdownComponents } from "./components/MarkdownCode";
 import { connectToServer, type ServerInfo } from "./mcp/host-bridge";
 import { type DisplayItem } from "./agent/runner";
 import { useDebugBridge } from "./lib/debug-bridge";
@@ -272,6 +273,7 @@ export default function App() {
           return (
             <XMarkdown
               content={String(content ?? "")}
+              components={markdownComponents}
               streaming={{ hasNextChunk: live, enableAnimation: true, tail: live }}
             />
           );
