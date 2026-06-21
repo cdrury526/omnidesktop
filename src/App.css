@@ -246,6 +246,22 @@ button:disabled { opacity: 0.55; cursor: default; }
 .tool-card-status { font-size: 0.8em; }
 .tool-card.cancelled { border-color: light-dark(#9ca3af, #6b7280); opacity: 0.8; }
 
+/* Tool-call steps in the transcript (ThoughtChain). */
+.tool-chain { width: 100%; }
+.tool-detail {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow: auto;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 /* Queued messages — typed while the agent was busy / a form was open. */
 .bubble.queued {
   opacity: 0.6;

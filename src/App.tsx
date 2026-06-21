@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { AutoComplete, Input, Modal } from "antd";
-import { Bubble, Sender } from "@ant-design/x";
+import { Bubble, Sender, ThoughtChain } from "@ant-design/x";
 import { XMarkdown } from "@ant-design/x-markdown";
 import {
   connectToServer,
@@ -47,6 +47,60 @@ import { HistoryOutlined } from "@ant-design/icons";
 import "./App.css";
 
 const DEFAULT_SERVER = "http://localhost:3001/mcp";
+
+type ToolItem = Extract<DisplayItem, { kind: "tool" }>;
+
+// Our tool-call statuses → ThoughtChain step status + a friendly label.
+const TOOL_STATUS: Record<ToolItem["status"], { status: "loading" | "success" | "error" | "abort"; label: string }> = {
+  pending: { status: "loading", label: "awaiting input" },
+  done: { status: "success", label: "done" },
+  error: { status: "error", label: "error" },
+  cancelled: { status: "abort", label: "cancelled" },
+};
+
+function pretty(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") {
+    try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; }
+  }
+  try { return JSON.stringify(v, null, 2); } catch { return String(v); }
+}
+
+/**
+ * One tool call rendered as a ThoughtChain step: status + expandable detail
+ * (the call args — e.g. the form spec — and the result, linked by callId via
+ * the persisted conversation_state). Self-contained expand state so it can live
+ * inside Bubble.List's per-item contentRender.
+ */
+function ToolStep({ item }: { item: ToolItem }) {
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  const map = TOOL_STATUS[item.status];
+  const argsText = pretty(item.args);
+  const resultText = item.status === "pending" ? "" : pretty(item.result);
+  const detail = [argsText && `arguments:\n${argsText}`, resultText && `result:\n${resultText}`]
+    .filter(Boolean)
+    .join("\n\n");
+  return (
+    <ThoughtChain
+      className="tool-chain"
+      items={[
+        {
+          key: item.callId || item.name,
+          title: item.name,
+          description: map.label,
+          status: map.status,
+          blink: item.status === "pending",
+          collapsible: !!detail,
+          content: detail ? (
+            <pre className="tool-detail">{detail}</pre>
+          ) : undefined,
+        },
+      ]}
+      expandedKeys={expandedKeys}
+      onExpand={setExpandedKeys}
+    />
+  );
+}
 
 export default function App() {
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER);
@@ -578,21 +632,7 @@ export default function App() {
       tool: {
         placement: "start" as const,
         variant: "borderless" as const,
-        contentRender: (content: unknown) => {
-          const t = content as Extract<DisplayItem, { kind: "tool" }>;
-          return (
-            <div className={`tool-card ${t.status}`}>
-              <span className="tool-card-icon">🔧</span>
-              <span className="tool-card-name">{t.name}</span>
-              <span className="tool-card-status">
-                {t.status === "pending" && "· awaiting input"}
-                {t.status === "done" && "· done"}
-                {t.status === "error" && "· error"}
-                {t.status === "cancelled" && "· cancelled"}
-              </span>
-            </div>
-          );
-        },
+        contentRender: (content: unknown) => <ToolStep item={content as ToolItem} />,
       },
       queued: {
         placement: "end" as const,
