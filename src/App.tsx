@@ -11,6 +11,7 @@ import {
   buildMcpTools,
   runTurn,
   resumeTurn,
+  openForm,
   displayItemsFromState,
   pendingHitlCall,
   type DisplayItem,
@@ -164,6 +165,7 @@ export default function App() {
     setConversationId(null);
     setMessages([]);
     setActivation(null);
+    formDirtyRef.current = false;
     setConnError(null);
     setHistoryOpen(false);
   }, []);
@@ -396,6 +398,28 @@ export default function App() {
     newchat: async () => {
       newChat();
       return { ok: true };
+    },
+    openform: async (spec) => {
+      if (busy) return { error: "busy" };
+      if (!apiKey || !model || !server) return { error: "need apiKey + model + connected server" };
+      const convId = conversationId ?? (await createConversation(`form: ${(spec as { title?: string })?.title ?? "untitled"}`));
+      if (conversationId == null) setConversationId(convId);
+      setBusy(true);
+      setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
+      const accessor = conversationStateAccessor(convId);
+      const tools = buildMcpTools(server, summonPanel);
+      try {
+        await openForm({ apiKey, model, spec, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
+        setMessages(displayItemsFromState(await getConversationState(convId)));
+      } catch (e) {
+        setAssistantError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+        await touchConversation(convId);
+        void refreshConversations();
+      }
+      const st = await getConversationState(convId);
+      return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
     },
     send: async (text) => {
       const convId = await runUserTurn(text);

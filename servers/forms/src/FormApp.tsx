@@ -152,7 +152,9 @@ export function FormApp({ app, spec }: { app: App; spec: FormSpec }) {
   };
 
   useEffect(() => {
-    if (!__OMNI_DEBUG__) return;
+    // Runtime flag injected by the forms server (on by default in dev). The poll
+    // code is always bundled but inert unless the flag is set.
+    if (!(window as { __OMNI_DEBUG__?: boolean }).__OMNI_DEBUG__) return;
     let stopped = false;
     (async () => {
       while (!stopped) {

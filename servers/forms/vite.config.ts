@@ -11,9 +11,6 @@ const isDevelopment = process.env.NODE_ENV === "development";
 // which the MCP server serves as the `ui://` resource.
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
-  // Dev-only flag: when built with OMNI_DEBUG=1, the form opens a command
-  // channel to the local debug bridge so an agent can drive its fields.
-  define: { __OMNI_DEBUG__: JSON.stringify(process.env.OMNI_DEBUG === "1") },
   build: {
     sourcemap: isDevelopment ? "inline" : undefined,
     cssMinify: !isDevelopment,
