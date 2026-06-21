@@ -60,38 +60,18 @@ html, body {
 .field .req { color: var(--color-error); }
 .field .help { font-size: 0.85em; color: var(--color-text-secondary); }
 .field .err { font-size: 0.85em; color: var(--color-error); }
-.field-error input,
-.field-error textarea,
-.field-error select { border-color: var(--color-error); }
-
-input[type="text"],
-input[type="email"],
-input[type="url"],
-input[type="password"],
-input[type="number"],
-input[type="date"],
-input[type="time"],
-input[type="datetime-local"],
-textarea,
-select {
-  width: 100%;
-  padding: 0.5rem;
-  font: inherit;
-  color: inherit;
-  background: var(--color-background-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
+/* The controls are antd (themed via ConfigProvider); here we only flag an
+   invalid field by reddening its control border. */
+.field-error :where(.ant-input, .ant-input-affix-wrapper, .ant-input-number,
+  .ant-select-selector, .ant-picker) {
+  border-color: var(--color-error) !important;
 }
 
-textarea { resize: vertical; }
-
-.slider { display: flex; align-items: center; gap: 0.75rem; }
-.slider input[type="range"] { flex: 1; }
-.slider output { min-width: 2.5em; text-align: right; }
-
 .radio-group, .checkbox-group { display: flex; flex-direction: column; gap: 0.35rem; }
-.radio, .checkbox, .switch { display: flex; align-items: center; gap: 0.5rem; font-weight: 400; }
-.radio small, .checkbox small { color: var(--color-text-secondary); margin-left: 0.25rem; }
+.ant-radio-wrapper small, .ant-checkbox-wrapper small {
+  color: var(--color-text-secondary);
+  margin-left: 0.25rem;
+}
 
 .info {
   margin: 0;

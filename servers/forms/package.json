@@ -14,7 +14,9 @@
     "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@omni/forms-dsl": "workspace:*",
+    "antd": "^6.4.4",
     "cors": "^2.8.6",
+    "dayjs": "^1.11.21",
     "express": "^5.2.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

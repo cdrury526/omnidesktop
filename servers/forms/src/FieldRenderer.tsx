@@ -1,11 +1,31 @@
 /**
- * Renders one DSL field as a native input. This is the ONE place field types
- * turn into UI — adding a type to `@omni/forms-dsl` means adding a case here.
- * Native elements (not a component lib) keep the single-file sandbox bundle
- * small; theming comes from the host's CSS variables (see global.css).
+ * Renders one DSL field with Ant Design inputs. This is the ONE place field
+ * types turn into UI — adding a type to `@omni/forms-dsl` means adding a case
+ * here. The `.field` label/help/error wrapper is kept (the debug bridge's
+ * layout probe and the multi-step validation in FormApp rely on it); only the
+ * controls are antd. Theme comes from the host via ConfigProvider (mcp-app.tsx).
+ *
+ * Date/time fields keep the DSL contract of an ISO-ish string (validateResult
+ * stringifies them): antd's dayjs values are converted to/from those strings.
  */
+import {
+  Input,
+  InputNumber,
+  Select,
+  Radio,
+  Checkbox,
+  Switch,
+  Slider,
+  DatePicker,
+  TimePicker,
+} from "antd";
+import dayjs from "dayjs";
 import type { Field, FormValue, Option } from "@omni/forms-dsl";
 import { optionLabel, optionValue } from "@omni/forms-dsl";
+
+const DATE_FMT = "YYYY-MM-DD";
+const TIME_FMT = "HH:mm";
+const DATETIME_FMT = "YYYY-MM-DDTHH:mm";
 
 interface Props {
   field: Field;
@@ -48,11 +68,21 @@ function Control({
     case "text":
     case "email":
     case "url":
+      return (
+        <Input
+          id={id}
+          type={field.type === "text" ? "text" : field.type}
+          value={(value as string) ?? ""}
+          placeholder={field.placeholder}
+          maxLength={field.max}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
+
     case "secret":
       return (
-        <input
+        <Input.Password
           id={id}
-          type={field.type === "secret" ? "password" : field.type === "text" ? "text" : field.type}
           value={(value as string) ?? ""}
           placeholder={field.placeholder}
           maxLength={field.max}
@@ -62,27 +92,27 @@ function Control({
 
     case "textarea":
       return (
-        <textarea
+        <Input.TextArea
           id={id}
           value={(value as string) ?? ""}
           placeholder={field.placeholder}
           maxLength={field.max}
-          rows={4}
+          autoSize={{ minRows: 3, maxRows: 8 }}
           onChange={(e) => onChange(e.target.value)}
         />
       );
 
     case "number":
       return (
-        <input
+        <InputNumber
           id={id}
-          type="number"
-          value={value === undefined || value === null ? "" : (value as number)}
+          style={{ width: "100%" }}
+          value={value === undefined || value === null ? null : (value as number)}
           placeholder={field.placeholder}
           min={field.min}
           max={field.max}
           step={field.step}
-          onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+          onChange={(v) => onChange(v == null ? undefined : Number(v))}
         />
       );
 
@@ -91,105 +121,116 @@ function Control({
       const max = field.max ?? 100;
       const v = typeof value === "number" ? value : min;
       return (
-        <div className="slider">
-          <input
-            id={id}
-            type="range"
-            value={v}
-            min={min}
-            max={max}
-            step={field.step ?? 1}
-            onChange={(e) => onChange(Number(e.target.value))}
-          />
-          <output>{v}</output>
-        </div>
+        <Slider
+          id={id}
+          min={min}
+          max={max}
+          step={field.step ?? 1}
+          value={v}
+          onChange={(n) => onChange(Number(n))}
+        />
       );
     }
 
     case "boolean":
       return (
-        <label className="switch">
-          <input
-            id={id}
-            type="checkbox"
-            checked={Boolean(value)}
-            onChange={(e) => onChange(e.target.checked)}
-          />
-          <span>{field.placeholder ?? (value ? "Yes" : "No")}</span>
-        </label>
+        <Switch
+          id={id}
+          checked={Boolean(value)}
+          checkedChildren={field.placeholder ?? "Yes"}
+          unCheckedChildren="No"
+          onChange={(checked) => onChange(checked)}
+        />
       );
 
     case "select":
       return (
-        <select
+        <Select
           id={id}
-          value={(value as string) ?? ""}
-          onChange={(e) => onChange(e.target.value || undefined)}
-        >
-          <option value="">{field.placeholder ?? "Select…"}</option>
-          {field.options.map((o) => (
-            <option key={optionValue(o)} value={optionValue(o)}>
-              {optionLabel(o)}
-            </option>
-          ))}
-        </select>
+          style={{ width: "100%" }}
+          allowClear
+          value={(value as string) || undefined}
+          placeholder={field.placeholder ?? "Select…"}
+          onChange={(v) => onChange(v || undefined)}
+          options={field.options.map((o) => ({ value: optionValue(o), label: optionLabel(o) }))}
+        />
       );
 
     case "radio":
       return (
-        <div className="radio-group" role="radiogroup" aria-labelledby={id}>
-          {field.options.map((o) => (
-            <label key={optionValue(o)} className="radio">
-              <input
-                type="radio"
-                name={id}
-                value={optionValue(o)}
-                checked={value === optionValue(o)}
-                onChange={() => onChange(optionValue(o))}
-              />
-              <span>{optionLabel(o)}</span>
-              {optionDesc(o) && <small>{optionDesc(o)}</small>}
-            </label>
-          ))}
-        </div>
+        <Radio.Group
+          id={id}
+          value={value as string}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <div className="radio-group">
+            {field.options.map((o) => (
+              <Radio key={optionValue(o)} value={optionValue(o)}>
+                {optionLabel(o)}
+                {optionDesc(o) && <small>{optionDesc(o)}</small>}
+              </Radio>
+            ))}
+          </div>
+        </Radio.Group>
       );
 
     case "multiselect": {
-      const selected = new Set(Array.isArray(value) ? (value as string[]) : []);
-      const toggle = (val: string, on: boolean) => {
-        const next = new Set(selected);
-        if (on) next.add(val);
-        else next.delete(val);
-        onChange([...next]);
-      };
+      const selected = Array.isArray(value) ? (value as string[]) : [];
       return (
-        <div className="checkbox-group">
-          {field.options.map((o) => (
-            <label key={optionValue(o)} className="checkbox">
-              <input
-                type="checkbox"
-                checked={selected.has(optionValue(o))}
-                onChange={(e) => toggle(optionValue(o), e.target.checked)}
-              />
-              <span>{optionLabel(o)}</span>
-              {optionDesc(o) && <small>{optionDesc(o)}</small>}
-            </label>
-          ))}
-        </div>
+        <Checkbox.Group
+          value={selected}
+          onChange={(vals) => onChange(vals as string[])}
+        >
+          <div className="checkbox-group">
+            {field.options.map((o) => (
+              <Checkbox key={optionValue(o)} value={optionValue(o)}>
+                {optionLabel(o)}
+                {optionDesc(o) && <small>{optionDesc(o)}</small>}
+              </Checkbox>
+            ))}
+          </div>
+        </Checkbox.Group>
       );
     }
 
-    case "date":
-    case "time":
-    case "datetime":
+    case "date": {
+      const v = typeof value === "string" && value ? dayjs(value, DATE_FMT) : undefined;
       return (
-        <input
+        <DatePicker
           id={id}
-          type={field.type === "datetime" ? "datetime-local" : field.type}
-          value={(value as string) ?? ""}
-          onChange={(e) => onChange(e.target.value || undefined)}
+          style={{ width: "100%" }}
+          value={v && v.isValid() ? v : undefined}
+          onChange={(d) => onChange(d ? d.format(DATE_FMT) : undefined)}
         />
       );
+    }
+
+    case "time": {
+      const v = typeof value === "string" && value ? dayjs(value, TIME_FMT) : undefined;
+      return (
+        <TimePicker
+          id={id}
+          style={{ width: "100%" }}
+          format={TIME_FMT}
+          value={v && v.isValid() ? v : undefined}
+          onChange={(d) => onChange(d ? d.format(TIME_FMT) : undefined)}
+        />
+      );
+    }
+
+    case "datetime": {
+      const v = typeof value === "string" && value ? dayjs(value, DATETIME_FMT) : undefined;
+      return (
+        <DatePicker
+          id={id}
+          style={{ width: "100%" }}
+          showTime={{ format: TIME_FMT }}
+          format={DATETIME_FMT}
+          value={v && v.isValid() ? v : undefined}
+          onChange={(d) => onChange(d ? d.format(DATETIME_FMT) : undefined)}
+        />
+      );
+    }
   }
 }
 
