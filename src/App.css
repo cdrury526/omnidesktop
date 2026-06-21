@@ -209,8 +209,10 @@ button:disabled { opacity: 0.55; cursor: default; }
   padding: 2px 6px;
 }
 
-.app-pane-body { position: relative; flex: 1; overflow: auto; }
-.app-pane-surface { min-height: 100%; }
+/* Flex column so the surface gets a definite height to fill (a percentage
+   chain silently collapses here). */
+.app-pane-body { position: relative; flex: 1; overflow: auto; display: flex; flex-direction: column; }
+.app-pane-surface { flex: 1; min-height: 0; }
 .app-pane-note {
   position: absolute;
   inset: 0;

@@ -16,6 +16,10 @@ function Root() {
   const { app, error } = useApp({
     appInfo: { name: "Omni Forms", version: "0.1.0" },
     capabilities: {},
+    // The form fills the fixed-height side panel with a scrollable field area
+    // and a pinned footer, so we manage layout ourselves rather than letting
+    // the app auto-resize the iframe to content (which clips long forms).
+    autoResize: false,
     onAppCreated: (app) => {
       // The host forwards the tool arguments — our form spec — here.
       app.ontoolinput = (params) => {
