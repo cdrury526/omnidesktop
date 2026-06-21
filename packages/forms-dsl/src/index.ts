@@ -48,6 +48,10 @@ export {
 export {
   INTERACTIVE_TOOL_META,
   FORM_SUBMIT_KEY,
+  FORM_CANCEL_KEY,
+  FORM_DIRTY_KEY,
   type FormSubmitPayload,
   isFormSubmit,
+  isFormCancel,
+  readFormDirty,
 } from "./protocol";

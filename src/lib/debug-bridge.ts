@@ -21,6 +21,8 @@ export interface DebugHandles {
   send: (text: string) => Promise<unknown>;
   /** Resolve the pending HITL form with `values` (drives submit headlessly). */
   submit: (values: Record<string, unknown>) => Promise<unknown>;
+  /** Cancel the pending HITL form (drives cancel headlessly). */
+  cancel: () => Promise<unknown>;
   /** Summarize the active conversation (id, pending call, transcript items). */
   state: () => Promise<unknown>;
 }
@@ -89,6 +91,9 @@ export function useDebugBridge(handles: DebugHandles) {
               break;
             case "submit":
               result = await ref.current.submit((params?.values ?? {}) as Record<string, unknown>);
+              break;
+            case "cancel":
+              result = await ref.current.cancel();
               break;
             case "state":
               result = await ref.current.state();

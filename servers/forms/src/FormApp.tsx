@@ -8,7 +8,7 @@
  */
 import type { App } from "@modelcontextprotocol/ext-apps";
 import type { Field, FormSpec, FormValues, Issue } from "@omni/forms-dsl";
-import { evalCondition, FORM_SUBMIT_KEY, toSteps, validateResult } from "@omni/forms-dsl";
+import { evalCondition, FORM_CANCEL_KEY, FORM_DIRTY_KEY, FORM_SUBMIT_KEY, toSteps, validateResult } from "@omni/forms-dsl";
 import { useEffect, useMemo, useState } from "react";
 import { FieldRenderer } from "./FieldRenderer";
 
@@ -58,10 +58,22 @@ function defaults(spec: FormSpec): FormValues {
 
 export function FormApp({ app, spec }: { app: App; spec: FormSpec }) {
   const steps = useMemo(() => toSteps(spec), [spec]);
-  const [values, setValues] = useState<FormValues>(() => defaults(spec));
+  const initial = useMemo(() => defaults(spec), [spec]);
+  const [values, setValues] = useState<FormValues>(initial);
   const [stepIdx, setStepIdx] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+
+  // Tell the host whether anything has been entered, so it knows whether to
+  // confirm before cancelling (the host can't see inside this iframe).
+  const dirty = useMemo(() => JSON.stringify(values) !== JSON.stringify(initial), [values, initial]);
+  useEffect(() => {
+    void app.updateModelContext({ structuredContent: { [FORM_DIRTY_KEY]: dirty } });
+  }, [app, dirty]);
+
+  const cancel = () => {
+    void app.updateModelContext({ structuredContent: { [FORM_CANCEL_KEY]: true } });
+  };
 
   const step = steps[stepIdx];
   const isLast = stepIdx === steps.length - 1;
@@ -151,20 +163,25 @@ export function FormApp({ app, spec }: { app: App; spec: FormSpec }) {
       </div>
 
       <footer>
-        {stepIdx > 0 && (
-          <button type="button" className="ghost" onClick={back}>
-            Back
-          </button>
-        )}
-        {isLast ? (
-          <button type="button" className="primary" onClick={submit}>
-            {spec.submitLabel ?? "Submit"}
-          </button>
-        ) : (
-          <button type="button" className="primary" onClick={next}>
-            Next
-          </button>
-        )}
+        <button type="button" className="ghost" onClick={cancel}>
+          Cancel
+        </button>
+        <div className="footer-actions">
+          {stepIdx > 0 && (
+            <button type="button" className="ghost" onClick={back}>
+              Back
+            </button>
+          )}
+          {isLast ? (
+            <button type="button" className="primary" onClick={submit}>
+              {spec.submitLabel ?? "Submit"}
+            </button>
+          ) : (
+            <button type="button" className="primary" onClick={next}>
+              Next
+            </button>
+          )}
+        </div>
       </footer>
     </main>
   );

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AutoComplete, Input } from "antd";
+import { AutoComplete, Input, Modal } from "antd";
 import {
   connectToServer,
   callTool,
@@ -15,7 +15,7 @@ import {
   pendingHitlCall,
   type DisplayItem,
 } from "./agent/runner";
-import { isFormSubmit, validateResult, type FormSpec } from "@omni/forms-dsl";
+import { isFormSubmit, isFormCancel, readFormDirty, validateResult, type FormSpec } from "@omni/forms-dsl";
 import { useDebugBridge } from "./lib/debug-bridge";
 import { ModelPicker } from "./components/ModelPicker";
 import { AppPane } from "./components/AppPane";
@@ -273,34 +273,29 @@ export default function App() {
     await runUserTurn(text);
   }, [input, runUserTurn]);
 
+  // Whether the open form has unsaved input — reported by the form app (the host
+  // can't see inside the cross-origin iframe). Drives the confirm-on-cancel.
+  const formDirtyRef = useRef(false);
+
   /**
-   * Resolve the pending HITL form with `values`: validate host-side (the iframe
-   * is untrusted), feed the cleaned result back to the paused tool call, and let
-   * the SDK resume. Returns the conversation id it resolved against. Used both
-   * by the live submit channel and the debug bridge.
+   * Feed an output back to the pending HITL call and resume. `build` derives the
+   * output + the form_events log from the pending call. Shared by submit/cancel.
    */
-  const resolvePendingForm = useCallback(
-    async (values: Record<string, unknown>): Promise<number | null> => {
+  const resumePendingCall = useCallback(
+    async (
+      build: (pending: { callId: string; name: string; args: Record<string, unknown> }) => {
+        output: unknown;
+        log: Parameters<typeof logFormEvent>[0];
+      } | null,
+    ): Promise<number | null> => {
       const convId = conversationId;
       if (convId == null || busy) return null;
-
-      const state = await getConversationState(convId);
-      const pending = pendingHitlCall(state);
+      const pending = pendingHitlCall(await getConversationState(convId));
       if (!pending) return null;
 
-      const spec = pending.args as unknown as FormSpec;
-      const check = validateResult(spec, values);
-      const output = check.ok ? check.cleaned : { error: "invalid_result", issues: check.issues };
-
-      void logFormEvent({
-        conversationId: convId,
-        toolName: pending.name,
-        spec,
-        specValid: true,
-        issues: check.ok ? undefined : check.issues,
-        result: values,
-        status: "submitted",
-      });
+      const built = build(pending);
+      if (!built) return null;
+      void logFormEvent(built.log);
 
       setActivation(null);
       setBusy(true);
@@ -309,7 +304,7 @@ export default function App() {
       const accessor = conversationStateAccessor(convId);
       const tools = server ? buildMcpTools(server, setActivation) : [];
       try {
-        await resumeTurn({ apiKey, model, callId: pending.callId, output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
+        await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
         setMessages(displayItemsFromState(await getConversationState(convId)));
       } catch (e) {
         setAssistantError(e instanceof Error ? e.message : String(e));
@@ -323,14 +318,65 @@ export default function App() {
     [conversationId, busy, server, apiKey, model, appendDeltaToLastAssistant, setAssistantError, refreshConversations],
   );
 
-  // The form app pushes its submission here (via `updateModelContext`).
+  /** Validate the submitted values host-side (untrusted iframe) and resume. */
+  const resolvePendingForm = useCallback(
+    (values: Record<string, unknown>) =>
+      resumePendingCall((pending) => {
+        const spec = pending.args as unknown as FormSpec;
+        const check = validateResult(spec, values);
+        return {
+          output: check.ok ? check.cleaned : { error: "invalid_result", issues: check.issues },
+          log: { conversationId, toolName: pending.name, spec, specValid: true, issues: check.ok ? undefined : check.issues, result: values, status: "submitted" },
+        };
+      }),
+    [resumePendingCall, conversationId],
+  );
+
+  /** Resolve the pending form as cancelled so the agent unblocks. */
+  const cancelPendingForm = useCallback(
+    () =>
+      resumePendingCall((pending) => ({
+        output: { cancelled: true, reason: "The user dismissed the form without submitting." },
+        log: { conversationId, toolName: pending.name, spec: pending.args, specValid: true, status: "cancelled" },
+      })),
+    [resumePendingCall, conversationId],
+  );
+
+  /** Cancel, confirming first only if the user has entered something. */
+  const requestCancel = useCallback(() => {
+    if (formDirtyRef.current) {
+      Modal.confirm({
+        title: "Discard your answers?",
+        content: "The form will be cancelled and what you've entered cleared.",
+        okText: "Discard",
+        okType: "danger",
+        cancelText: "Keep editing",
+        onOk: () => void cancelPendingForm(),
+      });
+    } else {
+      void cancelPendingForm();
+    }
+  }, [cancelPendingForm]);
+
+  // The form app pushes submit / cancel / dirty signals here (updateModelContext).
   const onAppContext = useCallback(
     async (ctx: ModelContext | null) => {
       const sc = ctx?.structuredContent;
-      if (isFormSubmit(sc)) await resolvePendingForm(sc.values as Record<string, unknown>);
+      if (isFormSubmit(sc)) return void resolvePendingForm(sc.values as Record<string, unknown>);
+      if (isFormCancel(sc)) return requestCancel();
+      const dirty = readFormDirty(sc);
+      if (dirty !== null) formDirtyRef.current = dirty;
     },
-    [resolvePendingForm],
+    [resolvePendingForm, requestCancel],
   );
+
+  // Closing the pane on a pending form cancels it (same as the form's Cancel);
+  // otherwise it just dismisses a display-only app panel.
+  const onPaneClose = useCallback(async () => {
+    const st = conversationId != null ? await getConversationState(conversationId) : null;
+    if (pendingHitlCall(st)) requestCancel();
+    else setActivation(null);
+  }, [conversationId, requestCancel]);
 
   // Local debug bridge: lets an agent drive/inspect this app over HTTP. See
   // src/lib/debug-bridge.ts and src-tauri/src/debug.rs.
@@ -350,6 +396,11 @@ export default function App() {
       const convId = await resolvePendingForm(values);
       const st = convId != null ? await getConversationState(convId) : null;
       return { resolved: convId != null, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    },
+    cancel: async () => {
+      const convId = await cancelPendingForm();
+      const st = convId != null ? await getConversationState(convId) : null;
+      return { cancelled: convId != null, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
     },
     state: async () => {
       const st = conversationId != null ? await getConversationState(conversationId) : null;
@@ -439,6 +490,7 @@ export default function App() {
                   {m.status === "pending" && "· awaiting input"}
                   {m.status === "done" && "· done"}
                   {m.status === "error" && "· error"}
+                  {m.status === "cancelled" && "· cancelled"}
                 </span>
               </div>
             ) : (
@@ -470,7 +522,7 @@ export default function App() {
 
       <AppPane
         activation={activation}
-        onClose={() => setActivation(null)}
+        onClose={onPaneClose}
         onContextUpdate={onAppContext}
       />
 

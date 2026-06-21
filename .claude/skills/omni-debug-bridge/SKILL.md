@@ -55,6 +55,9 @@ curl -sS http://127.0.0.1:1456/state
 curl -sS -X POST http://127.0.0.1:1456/submit -H 'content-type: application/json' \
   -d '{"values":{"email":"a@b.com","color":"green"}}'
 
+# cancel the pending interactive form (agent unblocks, card -> cancelled)
+curl -sS -X POST http://127.0.0.1:1456/cancel
+
 # computed box + layout styles of HOST elements (the key tool for layout bugs)
 curl -sS 'http://127.0.0.1:1456/dom?selector=.app-pane-surface%20iframe'
 

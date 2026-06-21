@@ -244,3 +244,4 @@ button:disabled { opacity: 0.55; cursor: default; }
 .tool-card.done { border-color: light-dark(#10b981, #059669); }
 .tool-card.error { border-color: light-dark(#ef4444, #b91c1c); }
 .tool-card-status { font-size: 0.8em; }
+.tool-card.cancelled { border-color: light-dark(#9ca3af, #6b7280); opacity: 0.8; }
