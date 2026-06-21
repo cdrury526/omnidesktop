@@ -263,12 +263,19 @@ export default function App() {
       },
       assistant: {
         placement: "start" as const,
-        contentRender: (content: unknown, info: { status?: string }) => (
-          <XMarkdown
-            content={String(content ?? "")}
-            streaming={{ hasNextChunk: info?.status === "loading" }}
-          />
-        ),
+        // XMarkdown's own streaming animation: block elements fade in as they're
+        // parsed from the stream (tied to real arrival, so it never throttles or
+        // crawls), with a tail cursor while the model is still generating.
+        // `status === "loading"` marks the actively-streaming bubble.
+        contentRender: (content: unknown, info: { status?: string }) => {
+          const live = info?.status === "loading";
+          return (
+            <XMarkdown
+              content={String(content ?? "")}
+              streaming={{ hasNextChunk: live, enableAnimation: true, tail: live }}
+            />
+          );
+        },
       },
       tool: {
         placement: "start" as const,
