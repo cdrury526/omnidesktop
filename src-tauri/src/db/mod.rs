@@ -6,6 +6,11 @@
 //! tauri-plugin-sql ergonomics. To enable Turso sync later, switch `init` to
 //! `Builder::new_remote_replica(path, url, token)` and add the libsql sync
 //! features in Cargo.toml — no schema or query changes needed.
+//!
+//! Schema is versioned: see `migrations.rs` (`PRAGMA user_version`-tracked,
+//! applied at startup).
+
+mod migrations;
 
 use libsql::{params::Params, Builder, Connection, Database, Value};
 use serde_json::Value as Json;
@@ -31,74 +36,8 @@ pub async fn init(path: PathBuf) -> Result<Db, String> {
         .await
         .map_err(|e| e.to_string())?;
     let conn = database.connect().map_err(|e| e.to_string())?;
-    migrate(&conn).await.map_err(|e| e.to_string())?;
+    migrations::run(&conn).await?;
     Ok(Db { conn, database })
-}
-
-async fn migrate(conn: &Connection) -> Result<(), libsql::Error> {
-    conn.execute_batch(
-        // batch returns BatchRows; we only care about success.
-        "CREATE TABLE IF NOT EXISTS settings (
-            key   TEXT PRIMARY KEY,
-            value TEXT
-        );
-        CREATE TABLE IF NOT EXISTS mcp_servers (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            name       TEXT,
-            url        TEXT NOT NULL UNIQUE,
-            enabled    INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS tabs (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            kind       TEXT NOT NULL,
-            title      TEXT,
-            state      TEXT,
-            position   INTEGER NOT NULL DEFAULT 0,
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS conversations (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            title      TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS messages (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id INTEGER NOT NULL,
-            role            TEXT NOT NULL,
-            content         TEXT NOT NULL,
-            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, id);
-        CREATE TABLE IF NOT EXISTS conversation_state (
-            conversation_id INTEGER PRIMARY KEY,
-            state           TEXT NOT NULL,
-            updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS form_events (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id INTEGER,
-            tool_name       TEXT,
-            spec            TEXT,
-            spec_valid      INTEGER,
-            issues          TEXT,
-            result          TEXT,
-            status          TEXT NOT NULL,
-            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS events (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-            source          TEXT NOT NULL,
-            type            TEXT NOT NULL,
-            conversation_id INTEGER,
-            data            TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_events_id ON events(id);",
-    )
-    .await?;
-    Ok(())
 }
 
 fn json_to_value(j: Json) -> Value {
