@@ -60,10 +60,18 @@ export function installErrorCapture(): void {
   });
   window.addEventListener("unhandledrejection", (e) => {
     const reason = e.reason;
+    const message = reason instanceof Error ? reason.message : String(reason);
+    // Cancelling a turn (result.cancel()) frees the in-flight Tauri http
+    // response resource mid-stream; a pending read inside the SDK then rejects
+    // with "resource id … is invalid". Benign artifact of the abort — swallow it.
+    if (/resource id \d+ is invalid/i.test(message)) {
+      e.preventDefault();
+      return;
+    }
     logEvent({
       source: "system",
       type: "unhandledrejection",
-      data: { message: reason instanceof Error ? reason.message : String(reason), stack: reason instanceof Error ? reason.stack : undefined },
+      data: { message, stack: reason instanceof Error ? reason.stack : undefined },
     });
   });
 }

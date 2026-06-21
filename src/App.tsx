@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { AutoComplete, Input, Modal } from "antd";
-import { Bubble } from "@ant-design/x";
+import { Bubble, Sender } from "@ant-design/x";
 import { XMarkdown } from "@ant-design/x-markdown";
 import {
   connectToServer,
@@ -124,6 +124,8 @@ export default function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const [activation, setActivation] = useState<ToolCallInfo | null>(null);
+  // Aborts the in-flight turn (Sender's cancel button → runner's result.cancel()).
+  const abortRef = useRef<AbortController | null>(null);
   // The latest server, readable from stable callbacks without re-binding them.
   const serverRef = useRef<ServerInfo | null>(null);
   useEffect(() => {
@@ -311,32 +313,40 @@ export default function App() {
         { kind: "msg", role: "assistant", content: "" },
       ]);
       setBusy(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
       const startedAt = performance.now();
       logEvent({ source, type: "turn.start", conversationId: convId, data: { model, chars: text.length } });
 
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       const state = conversationStateAccessor(convId);
       try {
-        await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant });
+        await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal });
         let st = await getConversationState(convId);
         // Self-repair: if the model described a form but didn't call the tool,
         // re-prompt once with the tool forced (only when the forms tool exists).
-        if (server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
+        if (!controller.signal.aborted && server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
           logEvent({ source: "repair", type: "repair.fired", conversationId: convId });
-          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant });
+          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal });
           st = await getConversationState(convId);
         }
         // Reconcile with persisted state (surfaces tool cards). The panel, if a
         // form paused, was already opened by onAutoSummon mid-turn.
         applyState(st);
         emitToolEvents(convId, st);
-        logEvent({ source, type: "turn.end", conversationId: convId, data: { ms: Math.round(performance.now() - startedAt), formOpened: !!pendingHitlCall(st) } });
+        const ms = Math.round(performance.now() - startedAt);
+        if (controller.signal.aborted) {
+          logEvent({ source, type: "turn.cancelled", conversationId: convId, data: { ms } });
+        } else {
+          logEvent({ source, type: "turn.end", conversationId: convId, data: { ms, formOpened: !!pendingHitlCall(st) } });
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setAssistantError(msg);
         logEvent({ source, type: "turn.error", conversationId: convId, data: { ms: Math.round(performance.now() - startedAt), error: msg } });
       } finally {
         setBusy(false);
+        abortRef.current = null;
         await touchConversation(convId);
         void refreshConversations();
       }
@@ -345,8 +355,9 @@ export default function App() {
     [busy, apiKey, model, conversationId, server, appendDeltaToLastAssistant, setAssistantError, refreshConversations],
   );
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  /** Send (or queue) a message. `raw` comes from Sender's onSubmit. */
+  const submit = useCallback(async (raw: string) => {
+    const text = raw.trim();
     if (!text) return;
     setInput("");
     // Only send when the agent is "open"; otherwise queue (and show it queued).
@@ -356,7 +367,12 @@ export default function App() {
       return;
     }
     await runUserTurn(text);
-  }, [input, busy, formPending, conversationId, runUserTurn]);
+  }, [busy, formPending, conversationId, runUserTurn]);
+
+  /** Cancel the in-flight turn (Sender's cancel button). */
+  const cancelTurn = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   // Flush the next queued message once the agent is free (not busy, no open form).
   useEffect(() => {
@@ -393,19 +409,23 @@ export default function App() {
 
       setActivation(null);
       setBusy(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
       setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
 
       const accessor = conversationStateAccessor(convId);
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       try {
-        await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
+        await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal });
         const st = await getConversationState(convId);
         applyState(st);
         emitToolEvents(convId, st);
+        if (controller.signal.aborted) logEvent({ source: "user", type: "turn.cancelled", conversationId: convId });
       } catch (e) {
         setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(false);
+        abortRef.current = null;
         await touchConversation(convId);
         void refreshConversations();
       }
@@ -699,27 +719,33 @@ export default function App() {
         </section>
 
         <section className="composer">
-          <textarea
+          <Sender
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={setInput}
+            onSubmit={submit}
+            loading={busy}
+            onCancel={cancelTurn}
+            // While loading, Sender suppresses its own Enter-submit (the button
+            // is "cancel"). Intercept Enter so a message typed mid-turn still
+            // queues, matching the form-open queue path (which goes via onSubmit).
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (busy && e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                send();
+                void submit(input);
+                return false;
               }
             }}
+            autoSize={{ minRows: 1, maxRows: 6 }}
             placeholder={
               !server
                 ? "Connect a server to start"
-                : busy || formPending
-                  ? "Agent busy — your message will queue (Enter)"
-                  : "Message… (Enter to send)"
+                : busy
+                  ? "Agent is working — Enter queues, ✕ cancels"
+                  : formPending
+                    ? "Form open — your message will queue (Enter)"
+                    : "Message… (Enter to send)"
             }
-            rows={2}
           />
-          <button onClick={send} disabled={!input.trim()}>
-            {busy || formPending ? "Queue" : "Send"}
-          </button>
         </section>
       </main>
 

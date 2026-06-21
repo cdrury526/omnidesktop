@@ -134,14 +134,29 @@ function makeClient(apiKey: string): OpenRouter {
   });
 }
 
+/** Wire an external abort signal to the SDK's cooperative `result.cancel()`. */
+function wireAbort(result: { cancel: () => Promise<void> }, signal?: AbortSignal): void {
+  if (!signal) return;
+  if (signal.aborted) void result.cancel();
+  else signal.addEventListener("abort", () => void result.cancel(), { once: true });
+}
+
 async function streamText(
   result: { getTextStream: () => AsyncIterable<string> },
   onTextDelta: (delta: string) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   let full = "";
-  for await (const delta of result.getTextStream()) {
-    full += delta;
-    onTextDelta(delta);
+  try {
+    for await (const delta of result.getTextStream()) {
+      full += delta;
+      onTextDelta(delta);
+    }
+  } catch (e) {
+    // A cancelled turn ends the stream abruptly — treat it as a clean stop and
+    // return whatever streamed so far; only real failures propagate.
+    if (signal?.aborted) return full;
+    throw e;
   }
   return full;
 }
@@ -155,6 +170,8 @@ export interface RunTurnArgs {
   state: StateStore;
   tools: McpTools;
   onTextDelta: (delta: string) => void;
+  /** Abort the in-flight turn (cooperative — calls the SDK's `result.cancel()`). */
+  signal?: AbortSignal;
 }
 
 /** Run one user turn; streams assistant text via onTextDelta, returns full text. */
@@ -165,6 +182,7 @@ export async function runTurn({
   state,
   tools,
   onTextDelta,
+  signal,
 }: RunTurnArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
@@ -179,7 +197,8 @@ export async function runTurn({
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
   });
-  return streamText(result, onTextDelta);
+  wireAbort(result, signal);
+  return streamText(result, onTextDelta, signal);
 }
 
 export interface OpenFormArgs {
@@ -250,6 +269,7 @@ export interface RepairArgs {
   state: StateStore;
   tools: McpTools;
   onTextDelta: (delta: string) => void;
+  signal?: AbortSignal;
 }
 
 /** Re-prompt the model with the tool forced, after it described instead of calling. */
@@ -260,6 +280,7 @@ export async function repairToolCall({
   state,
   tools,
   onTextDelta,
+  signal,
 }: RepairArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
@@ -278,7 +299,8 @@ export async function repairToolCall({
     toolChoice: { type: "function", name: toolName } as never,
     stopWhen: stepCountIs(2),
   });
-  return streamText(result, onTextDelta);
+  wireAbort(result, signal);
+  return streamText(result, onTextDelta, signal);
 }
 
 export interface ResumeTurnArgs {
@@ -291,6 +313,7 @@ export interface ResumeTurnArgs {
   state: StateStore;
   tools: McpTools;
   onTextDelta: (delta: string) => void;
+  signal?: AbortSignal;
 }
 
 /** Resume a HITL-paused conversation by supplying a paused call's result. */
@@ -302,6 +325,7 @@ export async function resumeTurn({
   state,
   tools,
   onTextDelta,
+  signal,
 }: ResumeTurnArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
@@ -315,7 +339,8 @@ export async function resumeTurn({
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
   });
-  return streamText(result, onTextDelta);
+  wireAbort(result, signal);
+  return streamText(result, onTextDelta, signal);
 }
 
 // ---- reading persisted state for the UI ----
