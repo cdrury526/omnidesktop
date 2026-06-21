@@ -11,6 +11,9 @@ import {
   buildMcpTools,
   runTurn,
   resumeTurn,
+  openForm,
+  repairToolCall,
+  describedButDidntCall,
   displayItemsFromState,
   pendingHitlCall,
   type DisplayItem,
@@ -95,6 +98,17 @@ export default function App() {
   const [messages, setMessages] = useState<DisplayItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // Messages typed while the agent is busy or a form is open are queued, not
+  // sent (sending mid-form would abandon it). They flush when the agent is free.
+  const [queued, setQueued] = useState<string[]>([]);
+  const [formPending, setFormPending] = useState(false);
+  const flushingRef = useRef(false);
+
+  /** Reflect persisted state into the transcript + the "form open?" flag. */
+  const applyState = useCallback((state: unknown) => {
+    setMessages(displayItemsFromState(state));
+    setFormPending(!!pendingHitlCall(state));
+  }, []);
 
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -133,6 +147,7 @@ export default function App() {
     if (state) {
       setMessages(displayItemsFromState(state));
       const pending = pendingHitlCall(state);
+      setFormPending(!!pending);
       const srv = serverRef.current;
       if (pending && srv?.tools.has(pending.name)) {
         const info = callTool(srv, pending.name, pending.args);
@@ -145,8 +160,9 @@ export default function App() {
     // Legacy text-only conversations (pre SDK-state migration).
     const rows = await getMessages(id);
     setMessages(rows.map((r) => ({ kind: "msg", role: r.role as "user" | "assistant", content: r.content })));
+    setFormPending(false);
     setActivation(null);
-  }, []);
+  }, [summonPanel]);
 
   // Restore the most recent conversation on mount.
   useEffect(() => {
@@ -163,7 +179,10 @@ export default function App() {
   const newChat = useCallback(() => {
     setConversationId(null);
     setMessages([]);
+    setQueued([]);
+    setFormPending(false);
     setActivation(null);
+    formDirtyRef.current = false;
     setConnError(null);
     setHistoryOpen(false);
   }, []);
@@ -261,9 +280,16 @@ export default function App() {
       const state = conversationStateAccessor(convId);
       try {
         await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant });
+        let st = await getConversationState(convId);
+        // Self-repair: if the model described a form but didn't call the tool,
+        // re-prompt once with the tool forced (only when the forms tool exists).
+        if (server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
+          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant });
+          st = await getConversationState(convId);
+        }
         // Reconcile with persisted state (surfaces tool cards). The panel, if a
         // form paused, was already opened by onAutoSummon mid-turn.
-        setMessages(displayItemsFromState(await getConversationState(convId)));
+        applyState(st);
       } catch (e) {
         setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -280,8 +306,24 @@ export default function App() {
     const text = input.trim();
     if (!text) return;
     setInput("");
+    // Only send when the agent is "open"; otherwise queue (and show it queued).
+    if (busy || formPending) {
+      setQueued((q) => [...q, text]);
+      return;
+    }
     await runUserTurn(text);
-  }, [input, runUserTurn]);
+  }, [input, busy, formPending, runUserTurn]);
+
+  // Flush the next queued message once the agent is free (not busy, no open form).
+  useEffect(() => {
+    if (busy || formPending || queued.length === 0 || flushingRef.current) return;
+    flushingRef.current = true;
+    const next = queued[0];
+    setQueued((q) => q.slice(1));
+    void runUserTurn(next).finally(() => {
+      flushingRef.current = false;
+    });
+  }, [busy, formPending, queued, runUserTurn]);
 
   /**
    * Feed an output back to the pending HITL call and resume. `build` derives the
@@ -311,7 +353,7 @@ export default function App() {
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       try {
         await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
-        setMessages(displayItemsFromState(await getConversationState(convId)));
+        applyState(await getConversationState(convId));
       } catch (e) {
         setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -397,6 +439,28 @@ export default function App() {
       newChat();
       return { ok: true };
     },
+    openform: async (spec) => {
+      if (busy) return { error: "busy" };
+      if (!apiKey || !model || !server) return { error: "need apiKey + model + connected server" };
+      const convId = conversationId ?? (await createConversation(`form: ${(spec as { title?: string })?.title ?? "untitled"}`));
+      if (conversationId == null) setConversationId(convId);
+      setBusy(true);
+      setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
+      const accessor = conversationStateAccessor(convId);
+      const tools = buildMcpTools(server, summonPanel);
+      try {
+        await openForm({ apiKey, model, spec, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
+        applyState(await getConversationState(convId));
+      } catch (e) {
+        setAssistantError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+        await touchConversation(convId);
+        void refreshConversations();
+      }
+      const st = await getConversationState(convId);
+      return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    },
     send: async (text) => {
       const convId = await runUserTurn(text);
       const st = convId != null ? await getConversationState(convId) : null;
@@ -414,7 +478,7 @@ export default function App() {
     },
     state: async () => {
       const st = conversationId != null ? await getConversationState(conversationId) : null;
-      return { conversationId, busy, connected: !!server, formDirty: formDirtyRef.current, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+      return { conversationId, busy, formPending, queued, connected: !!server, formDirty: formDirtyRef.current, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
     },
   });
 
@@ -509,6 +573,19 @@ export default function App() {
               </div>
             ),
           )}
+          {queued.map((q, i) => (
+            <div key={`q${i}`} className="bubble user queued">
+              <span className="queued-text">{q}</span>
+              <span className="queued-tag">queued</span>
+              <button
+                className="queued-remove"
+                title="Remove from queue"
+                onClick={() => setQueued((qs) => qs.filter((_, j) => j !== i))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
         </section>
 
         <section className="composer">
@@ -521,11 +598,17 @@ export default function App() {
                 send();
               }
             }}
-            placeholder={server ? "Message… (Enter to send)" : "Connect a server to start"}
+            placeholder={
+              !server
+                ? "Connect a server to start"
+                : busy || formPending
+                  ? "Agent busy — your message will queue (Enter)"
+                  : "Message… (Enter to send)"
+            }
             rows={2}
           />
-          <button onClick={send} disabled={busy || !input.trim()}>
-            {busy ? "…" : "Send"}
+          <button onClick={send} disabled={!input.trim()}>
+            {busy || formPending ? "Queue" : "Send"}
           </button>
         </section>
       </main>

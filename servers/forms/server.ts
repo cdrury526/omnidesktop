@@ -35,12 +35,21 @@ const DIST_DIR = import.meta.filename.endsWith(".ts")
 
 const resourceUri = "ui://request-user-input/mcp-app.html";
 
-// Dev-only: let the form reach the local debug bridge so an agent can drive its
-// fields headlessly. Widens only the form's connect-src; off unless OMNI_DEBUG=1.
-const DEBUG = process.env.OMNI_DEBUG === "1";
+// Let the form reach the local debug bridge so an agent can drive its fields
+// headlessly. ON BY DEFAULT during development — opt out with OMNI_DEBUG=0 once
+// shipping. The form bundle is built once (the poll loop is guarded by the
+// `window.__OMNI_DEBUG__` flag we inject below), and this widens only the form's
+// connect-src — nothing else.
+const DEBUG = process.env.OMNI_DEBUG !== "0";
 const DEBUG_META = DEBUG
   ? { _meta: { ui: { csp: { connectDomains: ["http://127.0.0.1:1456"] } } } }
   : {};
+
+/** Inject the runtime debug flag into the served form HTML (no special build). */
+function withDebugFlag(html: string): string {
+  if (!DEBUG) return html;
+  return html.replace(/<head>/i, `<head><script>window.__OMNI_DEBUG__=true</script>`);
+}
 
 export function createServer(): McpServer {
   const server = new McpServer({ name: "Omni Forms (Interactive Input)", version: "0.1.0" });
@@ -73,7 +82,7 @@ export function createServer(): McpServer {
     resourceUri,
     { mimeType: RESOURCE_MIME_TYPE },
     async (): Promise<ReadResourceResult> => {
-      const html = await fs.readFile(path.join(DIST_DIR, "mcp-app.html"), "utf-8");
+      const html = withDebugFlag(await fs.readFile(path.join(DIST_DIR, "mcp-app.html"), "utf-8"));
       return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html, ...DEBUG_META }] };
     },
   );

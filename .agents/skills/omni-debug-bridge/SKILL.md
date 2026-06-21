@@ -23,32 +23,33 @@ webview handlers). The bridge starts automatically with the app in dev.
 - Dev-only: the whole bridge is gated to debug builds (`#[cfg(debug_assertions)]`
   + `import.meta.env.DEV`); it never exists in a release build.
 
-## Driving form fields (Tier 2)
+## Driving form fields (Tier 2) needs OMNI_DEBUG
 
-Form-field driving (`/forminput`, `/formclick`) is **on by default** in dev — the
-forms server injects a runtime flag and widens only the form's connect-src. Just
-run it normally; opt out later with `OMNI_DEBUG=0`:
+`/forminput` and `/formclick` reach inside the cross-origin sandboxed form, so
+the form must be built + served with `OMNI_DEBUG=1` (it opens a command channel
+to the bridge; dev-only, widens only the form's connect-src):
 
 ```bash
-cd servers/forms && INPUT=mcp-app.html pnpm exec vite build && PORT=3002 bun main.ts
+cd servers/forms
+OMNI_DEBUG=1 INPUT=mcp-app.html pnpm exec vite build
+OMNI_DEBUG=1 PORT=3002 bun main.ts
 ```
+
+Without `OMNI_DEBUG`, host interaction (`/type`,`/click`,`/press`) still works;
+only the in-iframe field driving is disabled.
 
 ## Reliable scenario pattern
 
-Use `/openform` for **deterministic** forms (it forces the tool call, so it never
-depends on the model's phrasing). `/forminput` waits for the form via the command
-queue — no readiness polling needed; it fails fast (~12s) with a clear error if
-no form opened.
+Isolate and gate on readiness, or commands race form mount:
 
 ```bash
 curl -sS -X POST :1456/newchat
-curl -sS -X POST :1456/openform -d '{"spec":{"v":1,"title":"T","fields":[{"id":"email","type":"email","label":"Email"}]}}'
-curl -sS -X POST :1456/forminput -d '{"id":"email","value":"a@b.com"}'
+curl -sS -X POST :1456/send -d '{"text":"...make a form..."}'
+# poll until the form is mounted before driving fields:
+until [ "$(curl -s :1456/formdom | jq -r .result.fieldCount)" != "0" ]; do sleep 1; done
+curl -sS -X POST :1456/forminput -d '{"id":"...","value":"..."}'
 curl -sS -X POST :1456/formclick -d '{"target":"submit"}'
 ```
-
-(`/send "make a form"` also works but relies on the model emitting the tool call;
-prefer `/openform` for deterministic UI tests.)
 
 ## Start / reuse the app
 
@@ -88,10 +89,6 @@ curl -sS -X POST http://127.0.0.1:1456/cancel
 
 # start a fresh conversation (test isolation — do this before a scenario)
 curl -sS -X POST http://127.0.0.1:1456/newchat
-
-# deterministically open a form from a DSL spec (forced tool call — no model luck)
-curl -sS -X POST http://127.0.0.1:1456/openform -H 'content-type: application/json' \
-  -d '{"spec":{"v":1,"title":"T","fields":[{"id":"email","type":"email","label":"Email"}]}}'
 
 # --- synthetic USER INPUT on the host document ---
 curl -sS -X POST http://127.0.0.1:1456/type  -H 'content-type: application/json' \

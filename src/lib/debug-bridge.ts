@@ -19,6 +19,8 @@ export interface DebugHandles {
   connect: (url: string) => Promise<unknown>;
   /** Start a fresh conversation (test isolation). */
   newchat: () => Promise<unknown>;
+  /** Deterministically open a form with the given DSL spec (forced tool call). */
+  openform: (spec: unknown) => Promise<unknown>;
   /** Run a chat turn with `text`; resolve when it completes or pauses. */
   send: (text: string) => Promise<unknown>;
   /** Resolve the pending HITL form with `values` (drives submit headlessly). */
@@ -122,6 +124,9 @@ export function useDebugBridge(handles: DebugHandles) {
               break;
             case "newchat":
               result = await ref.current.newchat();
+              break;
+            case "openform":
+              result = await ref.current.openform(params?.spec);
               break;
             case "send":
               result = await ref.current.send(String(params?.text ?? ""));

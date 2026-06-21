@@ -90,12 +90,18 @@ export function buildMcpTools(
 const SYSTEM_PROMPT =
   "You are a helpful desktop assistant running in a native app. You can call " +
   "tools provided by connected MCP servers. Some tools open an interactive UI " +
-  "panel beside the chat (forms, dropdowns, pickers); prefer them over asking " +
-  "for structured input in prose. After opening such a panel, briefly tell the " +
-  "user to fill it in — do not invent their answers; you will receive the " +
-  "submitted values as the tool result. If a tool result says the user " +
-  "cancelled, acknowledge it briefly and move on; don't reopen the form unless " +
-  "they ask.";
+  "panel beside the chat (forms, dropdowns, pickers).\n\n" +
+  "CRITICAL RULE: when you need structured input from the user — anything you'd " +
+  "otherwise collect by listing questions — you MUST call the appropriate tool " +
+  "(e.g. `request_user_input`) in the SAME turn. Do NOT describe a form, say " +
+  "you'll show one, or list the fields in prose: actually emit the tool call. " +
+  "Describing instead of calling is a failure.\n\n" +
+  "Example — user: \"sign me up\" → you immediately call request_user_input with " +
+  "the fields (name, email, plan, …). You do not write \"Sure, let me pull up a " +
+  "form\"; you call the tool.\n\n" +
+  "After a form opens, briefly tell the user to fill it in — never invent their " +
+  "answers; you receive the submitted values as the tool result. If a result " +
+  "says the user cancelled, acknowledge briefly and move on.";
 
 /**
  * Persistence seam for the SDK's `ConversationState`. Matches the SDK's
@@ -160,6 +166,105 @@ export async function runTurn({
     tools,
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
+  });
+  return streamText(result, onTextDelta);
+}
+
+export interface OpenFormArgs {
+  apiKey: string;
+  model: string;
+  /** The DSL form spec to open. */
+  spec: unknown;
+  /** Tool name to force (defaults to the forms tool). */
+  toolName?: string;
+  state: StateStore;
+  tools: McpTools;
+  onTextDelta: (delta: string) => void;
+}
+
+/**
+ * Deterministically open a form: force the model to call the forms tool with the
+ * given spec (`tool_choice`), so it can't answer in prose. Demonstrates the
+ * tool-forcing guardrail and powers the debug bridge's `/openform`.
+ */
+export async function openForm({
+  apiKey,
+  model,
+  spec,
+  toolName = "request_user_input",
+  state,
+  tools,
+  onTextDelta,
+}: OpenFormArgs): Promise<string> {
+  const or = makeClient(apiKey);
+  const result = or.callModel({
+    model,
+    instructions: SYSTEM_PROMPT,
+    input: [
+      {
+        role: "user",
+        content:
+          `Call the \`${toolName}\` tool now with exactly these arguments ` +
+          `(verbatim JSON, do not change them): ${JSON.stringify(spec)}`,
+      },
+    ] as never,
+    state: state as never,
+    tools,
+    toolChoice: { type: "function", name: toolName } as never,
+    stopWhen: stepCountIs(2),
+  });
+  return streamText(result, onTextDelta);
+}
+
+// Self-repair: when the model *describes* showing a form instead of emitting the
+// tool call (a known intermittent failure on some models), we detect it and
+// re-prompt with the tool forced. Conservative on purpose — both an action
+// phrase AND a form/input noun must be present, or we don't intervene.
+const ACTION_INTENT_RE = /\b(i'?ll|i will|let me|i can|here'?s|going to|one moment|pop (it|that) up)\b/i;
+const FORM_INTENT_RE = /\b(form|fill (it|this|that|in)|details|sign[ -]?up|sign you up|subscri|collect|fields?|below)\b/i;
+
+/** True if the last assistant turn promised a form but no tool call happened. */
+export function describedButDidntCall(state: unknown): boolean {
+  const items = displayItemsFromState(state);
+  const last = items[items.length - 1];
+  if (!last || last.kind !== "msg" || last.role !== "assistant") return false;
+  return ACTION_INTENT_RE.test(last.content) && FORM_INTENT_RE.test(last.content);
+}
+
+export interface RepairArgs {
+  apiKey: string;
+  model: string;
+  toolName?: string;
+  state: StateStore;
+  tools: McpTools;
+  onTextDelta: (delta: string) => void;
+}
+
+/** Re-prompt the model with the tool forced, after it described instead of calling. */
+export async function repairToolCall({
+  apiKey,
+  model,
+  toolName = "request_user_input",
+  state,
+  tools,
+  onTextDelta,
+}: RepairArgs): Promise<string> {
+  const or = makeClient(apiKey);
+  const result = or.callModel({
+    model,
+    instructions: SYSTEM_PROMPT,
+    // A developer message — not shown in the transcript (display only renders
+    // user/assistant) — nudges; tool_choice forces the call.
+    input: [
+      {
+        role: "developer",
+        content: `You described showing a form but did not call the tool. Call \`${toolName}\` now with the fields you described.`,
+      },
+    ] as never,
+    state: state as never,
+    tools,
+    toolChoice: { type: "function", name: toolName } as never,
+    stopWhen: stepCountIs(2),
   });
   return streamText(result, onTextDelta);
 }

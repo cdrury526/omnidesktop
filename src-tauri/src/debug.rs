@@ -8,6 +8,7 @@
 //!   GET  /health                      -> liveness
 //!   POST /connect  {url}              -> connect to an MCP server
 //!   POST /newchat                      -> start a fresh conversation
+//!   POST /openform {spec}             -> deterministically open a form (forced tool call)
 //!   POST /send     {text}             -> run a chat turn with `text`
 //!   POST /submit   {values}           -> resolve the pending HITL form
 //!   POST /cancel                       -> cancel the pending HITL form
@@ -47,6 +48,9 @@ use tiny_http::{Header, Response, Server, StatusCode};
 
 const ADDR: &str = "127.0.0.1:1456";
 const TIMEOUT: Duration = Duration::from_secs(45);
+// Form commands fail fast: if no form picks them up quickly, the model likely
+// didn't open one — surface that instead of hanging.
+const FORM_TIMEOUT: Duration = Duration::from_secs(12);
 
 #[derive(Default)]
 pub struct DebugStore {
@@ -174,11 +178,13 @@ fn form_command(app: &tauri::AppHandle, action: &str, params: Value) -> Result<V
         q.push_back(json!({ "cmdId": cmd_id, "action": action, "params": params }));
     }
     store.form_cv.notify_all();
-    match rx.recv_timeout(TIMEOUT) {
+    match rx.recv_timeout(FORM_TIMEOUT) {
         Ok(result) => result,
         Err(_) => {
             let _ = store.form_acks.lock().map(|mut a| a.remove(&cmd_id));
-            Err("form command timed out — is a form open with OMNI_DEBUG=1?".to_string())
+            Err("no form picked this up — is a form open? (check GET /state; the \
+                 model may not have called request_user_input — try /openform)"
+                .to_string())
         }
     }
 }
@@ -301,6 +307,7 @@ fn handle_request(mut request: tiny_http::Request, app: &tauri::AppHandle) {
     let outcome = match (method.as_str(), route.as_str()) {
         ("POST", "/connect") => wait(app, "connect", read_body(&mut request)),
         ("POST", "/newchat") => wait(app, "newchat", json!({})),
+        ("POST", "/openform") => wait(app, "openform", read_body(&mut request)),
         ("POST", "/send") => wait(app, "send", read_body(&mut request)),
         ("POST", "/submit") => wait(app, "submit", read_body(&mut request)),
         ("POST", "/cancel") => wait(app, "cancel", json!({})),
