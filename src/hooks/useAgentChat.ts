@@ -202,6 +202,24 @@ export function useAgentChat({
     formDirtyRef.current = false;
   }, []);
 
+  /**
+   * Reset to a fresh chat already bound to `dir` (code mode on) — for the
+   * Projects panel's per-project `+`. Sets state only, no DB write: the chat
+   * doesn't exist yet (conversationId is about to be null), and runUserTurn
+   * persists the code-mode state when it creates the conversation. Persisting
+   * here would write to the *previous* conversation (stale id in this closure).
+   */
+  const startProjectChat = useCallback((dir: string) => {
+    setMessages([]);
+    setQueued([]);
+    setFormPending(false);
+    setActivation(null);
+    toolSeenRef.current.clear();
+    formDirtyRef.current = false;
+    setCodeModeState(true);
+    setWorkingDirState(dir);
+  }, []);
+
   const appendDeltaToLastAssistant = useCallback((delta: string) => {
     setMessages((msgs) => {
       const next = msgs.slice();
@@ -508,6 +526,7 @@ export function useAgentChat({
     cancelPendingForm,
     hydrate,
     resetChat,
+    startProjectChat,
     onAppContext,
     onPaneClose,
     openFormBridge,

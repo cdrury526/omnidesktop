@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
-import { AutoComplete, Input } from "antd";
 import { Bubble, Sender, ThoughtChain } from "@ant-design/x";
 import { AssistantMarkdown } from "./components/MarkdownCode";
 import { connectToServer, type ServerInfo } from "./mcp/host-bridge";
@@ -10,7 +9,11 @@ import { useAgentChat } from "./hooks/useAgentChat";
 import { ModelPicker } from "./components/ModelPicker";
 import { CodeModeToggle } from "./components/CodeModeToggle";
 import { AppPane } from "./components/AppPane";
-import { getApiKey, saveApiKey, deleteApiKey, keyringAvailable } from "./lib/secrets";
+import { SideRail, type RailSection } from "./components/SideRail";
+import { HistoryPanel } from "./components/panels/HistoryPanel";
+import { ProjectsPanel } from "./components/panels/ProjectsPanel";
+import { SettingsPanel } from "./components/panels/SettingsPanel";
+import { getApiKey, saveApiKey, deleteApiKey } from "./lib/secrets";
 import {
   getSetting,
   setSetting,
@@ -20,10 +23,18 @@ import {
   deleteConversation,
   type ConversationRow,
 } from "./lib/db";
-import { HistoryDrawer } from "./components/HistoryDrawer";
 import { ChatWelcome } from "./components/ChatWelcome";
-import { HistoryOutlined } from "@ant-design/icons";
+import { PlusOutlined } from "@ant-design/icons";
 import "./App.css";
+
+const RAIL_TITLES: Record<RailSection, string> = {
+  history: "History",
+  projects: "Projects",
+  tools: "Tools",
+  agents: "Agents",
+  commands: "Commands",
+  settings: "Settings",
+};
 
 const DEFAULT_SERVER = "http://localhost:3001/mcp";
 
@@ -139,7 +150,8 @@ export default function App() {
 
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // The rail section whose panel is open (null = collapsed to icons only).
+  const [railSection, setRailSection] = useState<RailSection | null>(null);
 
   const refreshConversations = useCallback(async () => {
     setConversations(await listConversations());
@@ -159,8 +171,12 @@ export default function App() {
   const {
     messages, input, setInput, busy, queued, setQueued, formPending, activation,
     codeMode, workingDir, setCodeMode, setWorkingDir,
-    submit, cancelTurn, hydrate, resetChat, onAppContext, onPaneClose,
+    submit, cancelTurn, hydrate, resetChat, startProjectChat, onAppContext, onPaneClose,
   } = chat;
+
+  const toggleRail = useCallback((section: RailSection) => {
+    setRailSection((cur) => (cur === section ? null : section));
+  }, []);
 
   // Restore the most recent conversation on mount.
   useEffect(() => {
@@ -178,14 +194,23 @@ export default function App() {
     setConversationId(null);
     resetChat();
     setConnError(null);
-    setHistoryOpen(false);
   }, [resetChat]);
+
+  // Start a fresh chat already bound to a project folder (code mode on). The
+  // working dir + mode persist when the first turn creates the conversation.
+  const newChatInProject = useCallback(
+    (dir: string) => {
+      setConversationId(null);
+      setConnError(null);
+      startProjectChat(dir);
+    },
+    [startProjectChat],
+  );
 
   const switchConversation = useCallback(
     async (id: number) => {
       setConversationId(id);
       await hydrate(id);
-      setHistoryOpen(false);
     },
     [hydrate],
   );
@@ -326,72 +351,75 @@ export default function App() {
 
   return (
     <div className="layout">
+      <SideRail
+        active={railSection}
+        onSelect={toggleRail}
+        badges={{ settings: !apiKey || !server }}
+      />
+
+      {railSection && (
+        <aside className="rail-panel">
+          <header className="panel-header">
+            <span className="panel-title">{RAIL_TITLES[railSection]}</span>
+            <button className="panel-close" onClick={() => setRailSection(null)} aria-label="Close panel">
+              ✕
+            </button>
+          </header>
+          {railSection === "history" && (
+            <HistoryPanel
+              conversations={conversations}
+              activeId={conversationId}
+              onSelect={switchConversation}
+              onDelete={removeConversation}
+            />
+          )}
+          {railSection === "projects" && (
+            <ProjectsPanel
+              conversations={conversations}
+              activeId={conversationId}
+              onSelect={switchConversation}
+              onDelete={removeConversation}
+              onNewInProject={newChatInProject}
+            />
+          )}
+          {railSection === "settings" && (
+            <SettingsPanel
+              apiKey={apiKey}
+              keyStatus={keyStatus}
+              onApiKeyChange={(k) => {
+                setApiKey(k);
+                setKeyStatus("unsaved");
+              }}
+              onApiKeyBlur={persistKey}
+              serverUrl={serverUrl}
+              serverOptions={serverOptions}
+              onServerUrlChange={setServerUrl}
+              onConnect={connect}
+              connecting={connecting}
+              serverName={server?.name ?? null}
+              toolCount={toolCount}
+            />
+          )}
+        </aside>
+      )}
+
       <main className="chat-pane">
         <header className="chat-header">
           <h1>Omni Desktop</h1>
-          <ModelPicker value={model} onChange={onModelChange} />
-          <Input.Password
-            value={apiKey}
-            onChange={(e) => {
-              setApiKey(e.target.value);
-              setKeyStatus("unsaved");
-            }}
-            onBlur={persistKey}
-            placeholder="OpenRouter API key"
-            style={{ width: 220 }}
-            title={
-              keyringAvailable
-                ? "Stored in your OS keyring"
-                : "Not running in Tauri — key won't persist"
-            }
-          />
-          <span className={`key-status ${keyStatus}`}>
-            {keyStatus === "stored" && "🔒 saved"}
-            {keyStatus === "unsaved" && "● unsaved"}
-            {keyStatus === "empty" && "no key"}
-          </span>
-          <CodeModeToggle
-            codeMode={codeMode}
-            workingDir={workingDir}
-            onCodeModeChange={setCodeMode}
-            onWorkingDirChange={setWorkingDir}
-          />
+          <div className="header-actions">
+            <CodeModeToggle
+              codeMode={codeMode}
+              workingDir={workingDir}
+              onCodeModeChange={setCodeMode}
+              onWorkingDirChange={setWorkingDir}
+            />
+            <button className="new-chat-btn" onClick={newChat}>
+              <PlusOutlined /> New chat
+            </button>
+          </div>
         </header>
 
-        <section className="connect-row">
-          <AutoComplete
-            value={serverUrl}
-            onChange={setServerUrl}
-            options={serverOptions}
-            style={{ flex: 1 }}
-            popupMatchSelectWidth={false}
-            filterOption={(input, option) =>
-              (option?.value ?? "").toLowerCase().includes(input.toLowerCase())
-            }
-            placeholder="http://localhost:3001/mcp"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") connect();
-            }}
-          />
-          <button onClick={connect} disabled={connecting}>
-            {connecting ? "Connecting…" : server ? "Reconnect" : "Connect"}
-          </button>
-        </section>
-        {server && (
-          <div className="status-line">
-            Connected to <strong>{server.name}</strong> · {toolCount} tool{toolCount === 1 ? "" : "s"} available
-          </div>
-        )}
         {connError && <div className="error-banner">{connError}</div>}
-
-        <section className="chat-toolbar">
-          <button className="ghost" onClick={() => setHistoryOpen(true)}>
-            <HistoryOutlined /> History
-          </button>
-          <button className="ghost" onClick={newChat}>
-            + New chat
-          </button>
-        </section>
 
         <section className="messages">
           {bubbleItems && bubbleItems.length > 0 ? (
@@ -426,14 +454,19 @@ export default function App() {
             autoSize={{ minRows: 1, maxRows: 6 }}
             placeholder={
               !server
-                ? "Connect a server to start"
+                ? "Connect a server in Settings to start"
                 : busy
                   ? "Agent is working — Enter queues, ✕ cancels"
                   : formPending
                     ? "Form open — your message will queue (Enter)"
-                    : "Message… (Enter to send)"
+                    : codeMode
+                      ? "Ask Omni to write code, refactor, or debug…"
+                      : "Message… (Enter to send)"
             }
           />
+          <div className="composer-footer">
+            <ModelPicker value={model} onChange={onModelChange} />
+          </div>
         </section>
       </main>
 
@@ -441,16 +474,6 @@ export default function App() {
         activation={activation}
         onClose={onPaneClose}
         onContextUpdate={onAppContext}
-      />
-
-      <HistoryDrawer
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        conversations={conversations}
-        activeId={conversationId}
-        onSelect={switchConversation}
-        onNew={newChat}
-        onDelete={removeConversation}
       />
     </div>
   );

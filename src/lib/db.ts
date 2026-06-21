@@ -73,6 +73,8 @@ export interface ConversationRow {
   id: number;
   title: string | null;
   updated_at: string;
+  code_mode: number;
+  working_dir: string | null;
 }
 
 export interface StoredMessage {
@@ -87,7 +89,8 @@ export async function createConversation(title: string): Promise<number> {
 
 export async function listConversations(): Promise<ConversationRow[]> {
   return dbSelect<ConversationRow>(
-    "SELECT id, title, updated_at FROM conversations ORDER BY updated_at DESC, id DESC LIMIT 100",
+    "SELECT id, title, updated_at, code_mode, working_dir FROM conversations " +
+      "ORDER BY updated_at DESC, id DESC LIMIT 100",
   );
 }
 

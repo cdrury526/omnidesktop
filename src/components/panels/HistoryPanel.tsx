@@ -1,31 +1,21 @@
+/**
+ * History panel (opened from the rail's History icon). A flat, searchable list
+ * of every conversation, newest first. Replaces the old left Drawer — rendered
+ * inline beside the rail so it sits in the layout instead of overlaying it.
+ */
 import { useMemo, useState } from "react";
-import { Button, Drawer, Empty, Input, List, Popconfirm } from "antd";
-import {
-  DeleteOutlined,
-  PlusOutlined,
-  SearchOutlined,
-} from "@ant-design/icons";
-import type { ConversationRow } from "../lib/db";
+import { Empty, Input, List, Popconfirm } from "antd";
+import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
+import type { ConversationRow } from "../../lib/db";
 
-export interface HistoryDrawerProps {
-  open: boolean;
-  onClose: () => void;
+interface Props {
   conversations: ConversationRow[];
   activeId: number | null;
   onSelect: (id: number) => void;
-  onNew: () => void;
   onDelete: (id: number) => void;
 }
 
-export function HistoryDrawer({
-  open,
-  onClose,
-  conversations,
-  activeId,
-  onSelect,
-  onNew,
-  onDelete,
-}: HistoryDrawerProps) {
+export function HistoryPanel({ conversations, activeId, onSelect, onDelete }: Props) {
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -37,18 +27,7 @@ export function HistoryDrawer({
   }, [conversations, query]);
 
   return (
-    <Drawer
-      title="Conversations"
-      placement="left"
-      width={320}
-      open={open}
-      onClose={onClose}
-      styles={{ body: { padding: 12, display: "flex", flexDirection: "column", gap: 10 } }}
-    >
-      <Button type="primary" icon={<PlusOutlined />} block onClick={onNew}>
-        New chat
-      </Button>
-
+    <div className="panel-body">
       <Input
         allowClear
         prefix={<SearchOutlined />}
@@ -56,7 +35,6 @@ export function HistoryDrawer({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-
       {filtered.length === 0 ? (
         <Empty
           description={query ? "No matches" : "No conversations yet"}
@@ -66,7 +44,7 @@ export function HistoryDrawer({
         <List
           size="small"
           dataSource={filtered}
-          style={{ overflowY: "auto" }}
+          className="panel-list"
           renderItem={(c) => (
             <List.Item
               onClick={() => onSelect(c.id)}
@@ -95,6 +73,6 @@ export function HistoryDrawer({
           )}
         />
       )}
-    </Drawer>
+    </div>
   );
 }
