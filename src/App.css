@@ -265,12 +265,23 @@ html, body, #root {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  overflow-y: auto;
+  overflow: hidden;
 }
-.panel-list { overflow-y: auto; }
+.panel-conversations {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+}
 
-/* ---- projects panel ---- */
-.projects-collapse .project-label { display: inline-flex; align-items: center; gap: 7px; font-size: 0.88rem; }
+/* ---- projects panel (Conversations group headers) ---- */
+.panel-conversations .project-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.88rem;
+}
 .project-count {
   color: var(--muted);
   font-size: 0.75rem;
@@ -280,26 +291,6 @@ html, body, #root {
 }
 .project-add { color: var(--muted); }
 .project-add:hover { color: var(--accent); }
-.project-sessions { list-style: none; margin: 0; padding: 0; }
-.projects-collapse .project-session.ant-list-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 6px 8px !important;
-  border: none;
-  border-radius: 7px;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-.projects-collapse .project-session.ant-list-item:hover { background: var(--bg-soft); }
-.projects-collapse .project-session.ant-list-item.active {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.session-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-del { color: var(--muted); opacity: 0; transition: opacity 120ms; }
-.projects-collapse .project-session:hover .session-del { opacity: 1; }
-.session-del:hover { color: light-dark(#dc2626, #f87171); }
 
 /* ---- settings panel ---- */
 .settings-panel { gap: 18px; }
@@ -349,20 +340,7 @@ html, body, #root {
   border-radius: 8px;
 }
 
-/* ---- history / projects list items ---- */
-.history-item { cursor: pointer; border-radius: 8px; padding-left: 8px !important; padding-right: 8px !important; }
-.history-item:hover { background: var(--bg-soft); }
-.history-item.active { background: color-mix(in srgb, var(--accent) 16%, transparent); }
-.history-title {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 210px;
-  font-size: 0.88rem;
-}
-.history-del { color: var(--muted); }
-.history-del:hover { color: light-dark(#dc2626, #f87171); }
+/* ---- history / projects: Conversations items inherit X active styling ---- */
 .key-status { font-size: 0.75rem; color: var(--muted); }
 .key-status.stored { color: light-dark(#15803d, #4ade80); }
 .key-status.unsaved { color: light-dark(#a16207, #fbbf24); }

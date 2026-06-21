@@ -4,15 +4,27 @@
  * inline beside the rail so it sits in the layout instead of overlaying it.
  */
 import { useMemo, useState } from "react";
-import { Empty, Input, List, Popconfirm } from "antd";
-import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
+import { Conversations, type ConversationItemType } from "@ant-design/x";
+import { Empty, Input } from "antd";
+import { MessageOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
+import { deleteConversationMenu } from "./conversationMenu";
 
 interface Props {
   conversations: ConversationRow[];
   activeId: number | null;
   onSelect: (id: number) => void;
   onDelete: (id: number) => void;
+}
+
+function toItem(c: ConversationRow): ConversationItemType {
+  return {
+    key: String(c.id),
+    label: c.title || `Chat ${c.id}`,
+    icon: <MessageOutlined />,
+    "aria-label": c.title || `Chat ${c.id}`,
+    "data-conversation-id": c.id,
+  };
 }
 
 export function HistoryPanel({ conversations, activeId, onSelect, onDelete }: Props) {
@@ -26,6 +38,8 @@ export function HistoryPanel({ conversations, activeId, onSelect, onDelete }: Pr
     );
   }, [conversations, query]);
 
+  const items = useMemo(() => filtered.map(toItem), [filtered]);
+
   return (
     <div className="panel-body">
       <Input
@@ -35,42 +49,18 @@ export function HistoryPanel({ conversations, activeId, onSelect, onDelete }: Pr
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-      {filtered.length === 0 ? (
+      {items.length === 0 ? (
         <Empty
           description={query ? "No matches" : "No conversations yet"}
           style={{ marginTop: 32 }}
         />
       ) : (
-        <List
-          size="small"
-          dataSource={filtered}
-          className="panel-list"
-          renderItem={(c) => (
-            <List.Item
-              onClick={() => onSelect(c.id)}
-              className={`history-item ${c.id === activeId ? "active" : ""}`}
-              actions={[
-                <Popconfirm
-                  key="del"
-                  title="Delete this conversation?"
-                  okText="Delete"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={(e) => {
-                    e?.stopPropagation();
-                    onDelete(c.id);
-                  }}
-                  onCancel={(e) => e?.stopPropagation()}
-                >
-                  <DeleteOutlined
-                    onClick={(e) => e.stopPropagation()}
-                    className="history-del"
-                  />
-                </Popconfirm>,
-              ]}
-            >
-              <span className="history-title">{c.title || `Chat ${c.id}`}</span>
-            </List.Item>
-          )}
+        <Conversations
+          className="panel-conversations"
+          items={items}
+          activeKey={activeId != null ? String(activeId) : undefined}
+          onActiveChange={(key) => onSelect(Number(key))}
+          menu={deleteConversationMenu(onDelete)}
         />
       )}
     </div>

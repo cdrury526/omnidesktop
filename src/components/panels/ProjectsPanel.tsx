@@ -6,9 +6,11 @@
  * they live in History.
  */
 import { useMemo } from "react";
-import { Collapse, Empty, List, Popconfirm, Tooltip } from "antd";
-import { DeleteOutlined, FolderOutlined, PlusOutlined } from "@ant-design/icons";
+import { Conversations, type ConversationItemType } from "@ant-design/x";
+import { Empty, Tooltip } from "antd";
+import { CodeOutlined, FolderOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
+import { deleteConversationMenu } from "./conversationMenu";
 
 interface Props {
   conversations: ConversationRow[];
@@ -19,16 +21,21 @@ interface Props {
   onNewInProject: (workingDir: string) => void;
 }
 
-interface Project {
-  dir: string;
-  name: string;
-  sessions: ConversationRow[];
-}
-
 /** Last path segment — the folder's own name. */
 function folderName(path: string): string {
   const parts = path.split(/[/\\]/).filter(Boolean);
   return parts[parts.length - 1] ?? path;
+}
+
+function toItem(c: ConversationRow): ConversationItemType {
+  return {
+    key: String(c.id),
+    label: c.title || `Chat ${c.id}`,
+    group: c.working_dir ?? undefined,
+    icon: <CodeOutlined />,
+    "aria-label": c.title || `Chat ${c.id}`,
+    "data-conversation-id": c.id,
+  };
 }
 
 export function ProjectsPanel({
@@ -38,23 +45,23 @@ export function ProjectsPanel({
   onDelete,
   onNewInProject,
 }: Props) {
-  // Group by working_dir, preserving recency: conversations arrive newest-first,
-  // so a Map keyed by dir keeps both group order and in-group order by recency.
-  const projects = useMemo<Project[]>(() => {
-    const byDir = new Map<string, Project>();
+  const projectDirs = useMemo(() => {
+    const dirs: string[] = [];
+    const seen = new Set<string>();
     for (const c of conversations) {
-      if (!c.working_dir) continue;
-      let p = byDir.get(c.working_dir);
-      if (!p) {
-        p = { dir: c.working_dir, name: folderName(c.working_dir), sessions: [] };
-        byDir.set(c.working_dir, p);
-      }
-      p.sessions.push(c);
+      if (!c.working_dir || seen.has(c.working_dir)) continue;
+      seen.add(c.working_dir);
+      dirs.push(c.working_dir);
     }
-    return [...byDir.values()];
+    return dirs;
   }, [conversations]);
 
-  if (projects.length === 0) {
+  const items = useMemo(
+    () => conversations.filter((c) => c.working_dir).map(toItem),
+    [conversations],
+  );
+
+  if (projectDirs.length === 0) {
     return (
       <div className="panel-body">
         <Empty
@@ -67,66 +74,35 @@ export function ProjectsPanel({
 
   return (
     <div className="panel-body">
-      <Collapse
-        className="projects-collapse"
-        defaultActiveKey={projects.map((p) => p.dir)}
-        items={projects.map((p) => ({
-          key: p.dir,
-          label: (
-            <Tooltip title={p.dir} placement="right">
+      <Conversations
+        className="panel-conversations"
+        items={items}
+        activeKey={activeId != null ? String(activeId) : undefined}
+        onActiveChange={(key) => onSelect(Number(key))}
+        menu={deleteConversationMenu(onDelete)}
+        groupable={{
+          collapsible: true,
+          defaultExpandedKeys: projectDirs,
+          label: (group, { groupInfo }) => (
+            <Tooltip title={group} placement="right">
               <span className="project-label">
                 <FolderOutlined />
-                <span className="project-name">{p.name}</span>
-                <span className="project-count">{p.sessions.length}</span>
+                <span className="project-name">{folderName(group)}</span>
+                <span className="project-count">{groupInfo.data.length}</span>
+                <Tooltip title="New chat in this project">
+                  <PlusOutlined
+                    className="project-add"
+                    aria-label="New chat in this project"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNewInProject(group);
+                    }}
+                  />
+                </Tooltip>
               </span>
             </Tooltip>
           ),
-          extra: (
-            <Tooltip title="New chat in this project">
-              <PlusOutlined
-                className="project-add"
-                aria-label="New chat in this project"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNewInProject(p.dir);
-                }}
-              />
-            </Tooltip>
-          ),
-          children: (
-            <List
-              size="small"
-              dataSource={p.sessions}
-              renderItem={(c) => (
-                <List.Item
-                  onClick={() => onSelect(c.id)}
-                  className={`project-session ${c.id === activeId ? "active" : ""}`}
-                  aria-label={c.title || `Chat ${c.id}`}
-                  actions={[
-                    <Popconfirm
-                      key="del"
-                      title="Delete this conversation?"
-                      okText="Delete"
-                      okButtonProps={{ danger: true }}
-                      onConfirm={(e) => {
-                        e?.stopPropagation();
-                        onDelete(c.id);
-                      }}
-                      onCancel={(e) => e?.stopPropagation()}
-                    >
-                      <DeleteOutlined
-                        className="session-del"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </Popconfirm>,
-                  ]}
-                >
-                  <span className="session-title">{c.title || `Chat ${c.id}`}</span>
-                </List.Item>
-              )}
-            />
-          ),
-        }))}
+        }}
       />
     </div>
   );
