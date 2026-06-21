@@ -7,7 +7,7 @@
  * The rail is app chrome (it spans all sessions); the panels it opens are
  * rendered by App next to it.
  */
-import { Tooltip } from "antd";
+import { Badge, Button, Tooltip } from "antd";
 import {
   HistoryOutlined,
   FolderOutlined,
@@ -54,23 +54,34 @@ interface Props {
 }
 
 export function SideRail({ active, onSelect, badges }: Props) {
-  const renderItem = (item: RailItem) => (
-    <Tooltip
-      key={item.key}
-      placement="right"
-      title={item.soon ? `${item.label} — coming soon` : item.label}
-    >
-      <button
+  const renderItem = (item: RailItem) => {
+    const button = (
+      <Button
+        type="text"
         className={`rail-item ${active === item.key ? "active" : ""} ${item.soon ? "soon" : ""}`}
+        icon={item.icon}
         onClick={() => !item.soon && onSelect(item.key)}
         disabled={item.soon}
         aria-label={item.label}
+      />
+    );
+
+    return (
+      <Tooltip
+        key={item.key}
+        placement="right"
+        title={item.soon ? `${item.label} — coming soon` : item.label}
       >
-        {item.icon}
-        {badges?.[item.key] && <span className="rail-badge" />}
-      </button>
-    </Tooltip>
-  );
+        {badges?.[item.key] ? (
+          <Badge dot className="rail-badge-wrap">
+            {button}
+          </Badge>
+        ) : (
+          button
+        )}
+      </Tooltip>
+    );
+  };
 
   return (
     <nav className="side-rail">
