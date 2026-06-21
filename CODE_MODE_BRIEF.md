@@ -24,16 +24,37 @@ Out (later, the "tools piece"):
 - Reading/writing files, running commands, indexing/embeddings, a file tree,
   diffs. None of that yet — this step is state + plumbing + prompt context only.
 
-## UX reference
+## Destination (from the Stitch renders)
 
-The maintainer has Stitch mockups (project `4128851077805521634`). **The Stitch
-MCP read methods are blocked and no images were attached**, so the exact visual
-is TBD — paste the reference images into the session before building the UI.
-Working assumptions to confirm against them:
-- Toggle lives in the header/toolbar (antd `Switch` or `Segmented`: Chat | Code).
-- When on, show the selected folder as a chip (basename + full path on hover) with
-  change/clear affordances; if on with no folder, prompt to pick one.
-- Empty-state copy may change in code mode.
+Renders live in `stitch-renders/stitch_omni_desktop_enhancements/` (`screen.png` +
+`code.html` per screen; `omni_desktop_light/DESIGN.md` is the design system, and it
+already matches our theme — indigo `#4f46e5`, soft-gray panels, 8px radius). The
+full vision they depict:
+
+- **Code Mode toggle** top-right in the header (pill, accent/green when on).
+- In code mode the session is bound to a **project = working folder**, shown as a
+  **tab** labeled by the folder name (folder icon + close ×).
+- **Multi-tab**: several projects open at once (`omni-desktop`, `rust-cli`,
+  `api-server`) with a `+` to add. (Note: there's already an unused `tabs` table.)
+- **History grouped by directory**: code chats grouped under their folder
+  (`projects/omni-desktop (3 chats)` → individual chats). An All | Code filter.
+- Composer copy changes in code mode ("Ask Omni to write code, refactor, or debug…").
+- A right rail with **Project Files** + an **Active Agent** card, and **Apply
+  Changes** on code blocks.
+
+**Only the first two bullets are this step.** The rest (multi-tab, history
+grouping, files panel, active agent, apply-changes) are later — but the data model
+here should not preclude them: storing `working_dir` per conversation directly
+enables "history grouped by directory," and one-folder-per-chat is the unit a
+future tab wraps.
+
+## UX for this step
+
+- Toggle in the header (antd `Switch`/`Segmented`), accent when on — matches the render.
+- When on, show the selected folder as a chip/tab (folder name + full path on
+  hover) with change/clear; if on with no folder, immediately open the picker.
+- Optionally switch the composer placeholder + empty-state copy in code mode.
+- Keep multi-tab/grouping/right-rail OUT — just the toggle + folder + its display.
 
 ## Where it touches this codebase
 
