@@ -13,6 +13,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { getLatestFormMetrics } from "../mcp/host-bridge";
+import { logEvent, getEvents } from "./events";
+
+// Read-only pokes we don't log (they're frequent and would drown the timeline).
+const QUIET_ACTIONS = new Set(["state", "dom", "formdom", "events", "health"]);
 
 export interface DebugHandles {
   /** Connect to an MCP server URL (so a turn has tools). */
@@ -116,9 +120,14 @@ export function useDebugBridge(handles: DebugHandles) {
       "debug://request",
       async (event) => {
         const { requestId, action, params } = event.payload;
+        // Record driving actions so the timeline shows when *I* poked vs the user.
+        if (!QUIET_ACTIONS.has(action)) logEvent({ source: "debug-bridge", type: `debug.${action}`, data: params });
         try {
           let result: unknown;
           switch (action) {
+            case "events":
+              result = await getEvents(Number(params?.since) || 0, Number(params?.limit) || 500);
+              break;
             case "connect":
               result = await ref.current.connect(String(params?.url ?? ""));
               break;

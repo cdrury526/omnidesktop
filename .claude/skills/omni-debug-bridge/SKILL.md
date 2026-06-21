@@ -114,6 +114,11 @@ curl -sS 'http://127.0.0.1:1456/dom?selector=.app-pane-surface%20iframe'
 # cannot pierce it, so the form app reports its own metrics via sendLog)
 curl -sS http://127.0.0.1:1456/formdom
 
+# the source-attributed activity timeline — turns, queue, form, repair, errors.
+# THE tool for "this weird thing happened": the `source` column separates user
+# actions from debug-bridge pokes from agent machinery (queue/repair/system).
+curl -sS 'http://127.0.0.1:1456/events?limit=50'   # newest first; ?since=<id> to tail
+
 # html2canvas PNG of the host UI -> snapshots/ (note: the cross-origin form
 # iframe renders BLANK in snapshots — use /dom and /formdom for form layout)
 curl -sS http://127.0.0.1:1456/snapshot
