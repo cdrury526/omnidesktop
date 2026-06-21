@@ -93,6 +93,48 @@ future tab wraps.
 - **Missing folder on load:** the saved path was moved/deleted — detect and warn?
 - **Picker:** confirm adding `@tauri-apps/plugin-dialog` + the capability entry.
 
+## Next phase — filesystem tools architecture (NOT this step)
+
+This is the "tools piece" that comes after the folder toggle. Written down now so
+the first step is built to fit it. The model is: **the agent's tool calls hit OUR
+host, and the host executes them via Rust** — the same boundary the app already
+uses for HTTP, keyring, and DB. There is no external "filesystem MCP server"; the
+fs tools are built into the host.
+
+**Shape:**
+- A `buildCodeTools(workingDir)` in `src/agent/runner.ts` (sibling to
+  `buildMcpTools`), registered only in code mode: `read_file`, `list_dir`,
+  `write_file`, `run_command`, … Each tool's `execute()` calls a Rust command
+  via `invoke("fs_read", …)` etc. The agent sees the tools; Rust does the work.
+- New Rust module (e.g. `src-tauri/src/fs.rs`) exposing those commands, each
+  taking the conversation's `working_dir` + a path/args.
+
+**Two separate boundaries — both required:**
+1. **Execution boundary (mostly free).** The untrusted MCP App iframes are
+   cross-origin sandboxed and have no `__TAURI_INTERNALS__`, so they *cannot*
+   call `invoke`. Only the host React app can. The "untrusted iframe touches the
+   disk" path is closed by construction — keep it that way (don't add an fs
+   bridge reachable from the sandbox).
+2. **Authorization boundary (the real work, in Rust).** The *model* picks the
+   paths/commands and can be steered by prompt injection (file contents, MCP
+   outputs, pasted text). So Rust must not trust the path it's handed: every fs
+   command **canonicalizes, resolves symlinks, and rejects anything outside
+   `working_dir`** (no `..` escape, no absolute paths out, no symlink-out). This
+   scoping check is the load-bearing code and must live in Rust (the chokepoint),
+   not the JS tool layer.
+
+**Reuse what already exists:**
+- **HITL approval** — the durable pause/resume built for forms is ideal for
+  "the agent wants to write `main.rs` / run `cargo build` — approve?" Gate
+  `write_file` / `run_command` behind user confirmation to start; loosen later.
+  `run_command` is the most dangerous (arbitrary exec even when scoped) — gate it
+  hardest, consider an allowlist.
+- **Events log** — every `fs_write` / `run_command` is an audit-trail entry for free.
+
+Slogan to keep straight: *"tools hit our app, we execute via Rust"* is the
+**transport**; the **safety** is *Rust enforces the path is inside the working dir
++ writes/exec are user-approved.* Both, or it's a footgun.
+
 ## Guardrails (non-negotiable, from this project)
 
 - Schema changes go through migrations — never hand-edit the live schema.
