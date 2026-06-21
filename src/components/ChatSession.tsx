@@ -1,8 +1,9 @@
 /**
  * One live chat session — the unit a tab wraps. Owns its conversation id and the
- * `useAgentChat` loop, and renders the transcript + composer + its own slide-out
- * MCP pane. Every open tab mounts one of these and stays mounted (hidden tabs
- * are `display:none`), so a backgrounded session keeps streaming its turn.
+ * `useAgentChat` loop, and renders the transcript + composer. MCP Apps mount
+ * inline on their tool card in the transcript (see InlineAppMount). Every open
+ * tab mounts one of these and stays mounted (hidden tabs are `display:none`), so
+ * a backgrounded session keeps streaming its turn.
  *
  * App is the shell (rail, tab bar, shared key/model/server); each session is
  * independent. A session reports its `meta` (conversation id, code mode, busy)
@@ -15,11 +16,11 @@ import { AssistantMarkdown } from "./MarkdownCode";
 import { ModelPicker } from "./ModelPicker";
 import { CodeModeToggle } from "./CodeModeToggle";
 import { FolderMissingNotice } from "./FolderMissingNotice";
-import { AppPane } from "./AppPane";
+import { InlineAppMount } from "./InlineAppMount";
 import { ChatWelcome } from "./ChatWelcome";
 import { useAgentChat } from "../hooks/useAgentChat";
 import type { DisplayItem } from "../agent/runner";
-import type { ServerInfo } from "../mcp/host-bridge";
+import type { ServerInfo, ToolCallInfo, ModelContext } from "../mcp/host-bridge";
 
 type ToolItem = Extract<DisplayItem, { kind: "tool" }>;
 
@@ -38,31 +39,60 @@ function pretty(v: unknown): string {
   try { return JSON.stringify(v, null, 2); } catch { return String(v); }
 }
 
-/** One tool call as a ThoughtChain step with expandable args/result detail. */
-function ToolStep({ item }: { item: ToolItem }) {
-  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+interface ToolStepProps {
+  item: ToolItem;
+  /** Live tool-call handle for the pending app (null when none is open). */
+  activation: ToolCallInfo | null;
+  /** Structured context the inline app pushes back (submit/cancel/dirty). */
+  onAppContext?: (ctx: ModelContext | null) => void;
+}
+
+/**
+ * One tool call as a ThoughtChain step. When this is the pending call that
+ * summoned an MCP App, its body hosts the interactive sandbox iframe inline
+ * (kept expanded so it can't be collapsed away mid-form); otherwise the body is
+ * the expandable args/result detail.
+ */
+function ToolStep({ item, activation, onAppContext }: ToolStepProps) {
   const map = TOOL_STATUS[item.status];
+  const key = item.callId || item.name;
+
+  // Mount the app inline on the call that's paused awaiting it. Only one HITL
+  // call is ever pending, so matching by name unambiguously hits this card.
+  const showApp =
+    item.status === "pending" && activation != null && activation.tool.name === item.name;
+
   const argsText = pretty(item.args);
   const resultText = item.status === "pending" ? "" : pretty(item.result);
   const detail = [argsText && `arguments:\n${argsText}`, resultText && `result:\n${resultText}`]
     .filter(Boolean)
     .join("\n\n");
+
+  const content = showApp ? (
+    <InlineAppMount activation={activation} onContextUpdate={onAppContext} />
+  ) : detail ? (
+    <pre className="tool-detail">{detail}</pre>
+  ) : undefined;
+
+  const [expandedKeys, setExpandedKeys] = useState<string[]>(showApp ? [key] : []);
+
   return (
     <ThoughtChain
       className="tool-chain"
       items={[
         {
-          key: item.callId || item.name,
+          key,
           title: item.name,
           description: map.label,
           status: map.status,
           blink: item.status === "pending",
-          collapsible: !!detail,
-          content: detail ? <pre className="tool-detail">{detail}</pre> : undefined,
+          collapsible: !!content,
+          content,
         },
       ]}
-      expandedKeys={expandedKeys}
-      onExpand={setExpandedKeys}
+      // The live form stays open: ignore collapse while the app is mounted.
+      expandedKeys={showApp ? [key] : expandedKeys}
+      onExpand={showApp ? () => {} : setExpandedKeys}
     />
   );
 }
@@ -133,7 +163,7 @@ export function ChatSession({
   const {
     messages, input, setInput, busy, queued, setQueued, formPending, activation,
     codeMode, workingDir, folderMissing, setCodeMode, setWorkingDir,
-    submit, cancelTurn, hydrate, startProjectChat, onAppContext, onPaneClose,
+    submit, cancelTurn, hydrate, startProjectChat, onAppContext,
   } = chat;
 
   const composerBlocked = folderMissing && !!workingDir;
@@ -184,7 +214,9 @@ export function ChatSession({
       tool: {
         placement: "start" as const,
         variant: "borderless" as const,
-        contentRender: (content: unknown) => <ToolStep item={content as ToolItem} />,
+        contentRender: (content: unknown) => (
+          <ToolStep item={content as ToolItem} activation={activation} onAppContext={onAppContext} />
+        ),
       },
       queued: {
         placement: "end" as const,
@@ -207,7 +239,7 @@ export function ChatSession({
         },
       },
     }),
-    [setQueued],
+    [setQueued, activation, onAppContext],
   );
 
   const bubbleItems = useMemo(() => {
@@ -299,8 +331,6 @@ export function ChatSession({
           </div>
         </section>
       </div>
-
-      <AppPane activation={activation} onClose={onPaneClose} onContextUpdate={onAppContext} />
     </section>
   );
 }

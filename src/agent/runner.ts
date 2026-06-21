@@ -161,8 +161,28 @@ function wireAbort(result: { cancel: () => Promise<void> }, signal?: AbortSignal
   else signal.addEventListener("abort", () => void result.cancel(), { once: true });
 }
 
+/**
+ * Thrown when a model streams its *raw tool-call template* into the text channel
+ * instead of emitting a structured tool call. Some models (seen with certain
+ * DeepSeek variants on OpenRouter) do this and then loop, flooding the
+ * transcript and wedging the app — so we stop the turn the instant we see it.
+ */
+export class LeakedToolCallError extends Error {
+  constructor() {
+    super("The model streamed a raw tool-call template instead of calling the tool.");
+    this.name = "LeakedToolCallError";
+  }
+}
+
+// The unmistakable signature of a leaked native tool-call template. The
+// fullwidth pipe `｜` (U+FF5C) opener (`<｜tool▁calls▁begin｜>`, `<｜DSML｜…>`)
+// never appears in legitimate prose; the ASCII `<|tool…|` / `<|im_start|` chat
+// markers are the other common leak. Matching either lets us bail on the first
+// token rather than after the model has looped.
+const LEAKED_TOOLCALL_RE = /<｜|<\|(?:tool|assistant|im_start|channel|dsml)/i;
+
 async function streamText(
-  result: { getTextStream: () => AsyncIterable<string> },
+  result: { getTextStream: () => AsyncIterable<string>; cancel?: () => Promise<void> },
   onTextDelta: (delta: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
@@ -171,8 +191,15 @@ async function streamText(
     for await (const delta of result.getTextStream()) {
       full += delta;
       onTextDelta(delta);
+      // Bail the moment a raw tool-call template appears — cancel server-side so
+      // the model stops generating, then surface a clean error to the caller.
+      if (LEAKED_TOOLCALL_RE.test(full)) {
+        await result.cancel?.().catch(() => {});
+        throw new LeakedToolCallError();
+      }
     }
   } catch (e) {
+    if (e instanceof LeakedToolCallError) throw e;
     // A cancelled turn ends the stream abruptly — treat it as a clean stop and
     // return whatever streamed so far; only real failures propagate.
     if (signal?.aborted) return full;
@@ -425,6 +452,16 @@ function callIdOf(item: Record<string, unknown>): string {
 }
 
 /**
+ * Strip a leaked tool-call template tail from assistant text, so a reload of a
+ * conversation where a model dumped its raw tool syntax shows clean prose (the
+ * live guard cancels early, but a partial may still have been persisted).
+ */
+function stripLeakedToolCall(text: string): string {
+  const m = LEAKED_TOOLCALL_RE.exec(text);
+  return m ? text.slice(0, m.index).trimEnd() : text;
+}
+
+/**
  * Full transcript from persisted state: user/assistant bubbles plus a card for
  * each tool call (resolved to done/error/pending by its matching output).
  */
@@ -471,7 +508,8 @@ export function displayItemsFromState(state: unknown): DisplayItem[] {
       continue;
     }
     if (role === "user" || role === "assistant") {
-      const text = itemText(item.content);
+      const raw = itemText(item.content);
+      const text = role === "assistant" ? stripLeakedToolCall(raw) : raw;
       if (text) out.push({ kind: "msg", role, content: text });
     }
   }

@@ -2,7 +2,8 @@
  * The chat session for the active conversation: the transcript, the composer
  * input, the busy/queue/form-pending flags, and every turn/form action built on
  * the `@openrouter/agent` loop (run / cancel / HITL resume / self-repair / the
- * message queue). It owns the slide-out panel's `activation` too, since the form
+ * message queue). It owns the inline app's `activation` too (the live tool-call
+ * handle InlineAppMount renders on its transcript card), since the form
  * lifecycle is part of the same flow.
  *
  * App keeps connection, the conversation list, and rendering; this hook is the
@@ -26,6 +27,7 @@ import {
   displayItemsFromState,
   pendingHitlCall,
   toolCardsFromState,
+  LeakedToolCallError,
   type DisplayItem,
 } from "../agent/runner";
 import { isFormSubmit, isFormCancel, readFormDirty, validateResult, type FormSpec } from "@omni/forms-dsl";
@@ -273,6 +275,43 @@ export function useAgentChat({
     });
   }, []);
 
+  /** Force-replace the last assistant bubble (used to wipe leaked template text). */
+  const replaceLastAssistant = useCallback((content: string) => {
+    setMessages((m) => {
+      const next = m.slice();
+      for (let i = next.length - 1; i >= 0; i--) {
+        const it = next[i];
+        if (it.kind === "msg" && it.role === "assistant") {
+          next[i] = { ...it, content };
+          break;
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Shared turn-failure handler. A leaked tool-call template (the model dumped
+   * its native tool syntax into the text channel) gets a clear, actionable
+   * notice instead of the garbled tokens; anything else is a normal error.
+   * Returns true when it handled a leak (so callers can skip generic logging).
+   */
+  const TOOLCALL_LEAK_NOTICE =
+    "⚠️ This model returned a malformed tool call — it streamed a raw tool-call " +
+    "template into the chat instead of invoking the tool, so the turn was stopped. " +
+    "Switch to a model with reliable tool-calling (e.g. an Anthropic or OpenAI model).";
+  const handleTurnError = useCallback(
+    (e: unknown, source: EventSource, convId: number | null): boolean => {
+      if (e instanceof LeakedToolCallError) {
+        replaceLastAssistant(TOOLCALL_LEAK_NOTICE);
+        logEvent({ source, type: "turn.toolcall_leak", conversationId: convId, data: { model } });
+        return true;
+      }
+      return false;
+    },
+    [replaceLastAssistant, model],
+  );
+
   /** Run one user turn for `text`. Returns the conversation id it ran against. */
   const runUserTurn = useCallback(
     async (text: string, source: EventSource = "user"): Promise<number | null> => {
@@ -326,9 +365,11 @@ export function useAgentChat({
           logEvent({ source, type: "turn.end", conversationId: convId, data: { ms, formOpened: !!pendingHitlCall(st) } });
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setAssistantError(msg);
-        logEvent({ source, type: "turn.error", conversationId: convId, data: { ms: Math.round(performance.now() - startedAt), error: msg } });
+        if (!handleTurnError(e, source, convId)) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setAssistantError(msg);
+          logEvent({ source, type: "turn.error", conversationId: convId, data: { ms: Math.round(performance.now() - startedAt), error: msg } });
+        }
       } finally {
         setBusy(false);
         abortRef.current = null;
@@ -337,7 +378,7 @@ export function useAgentChat({
       }
       return convId;
     },
-    [busy, apiKey, model, conversationId, server, setConnError, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, onConversationsChanged, activeWorkingDir],
+    [busy, apiKey, model, conversationId, server, setConnError, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged, activeWorkingDir],
   );
 
   /** Send (or queue) a message. `raw` comes from Sender's onSubmit. */
@@ -407,7 +448,7 @@ export function useAgentChat({
         emitToolEvents(convId, st);
         if (controller.signal.aborted) logEvent({ source: "user", type: "turn.cancelled", conversationId: convId });
       } catch (e) {
-        setAssistantError(e instanceof Error ? e.message : String(e));
+        if (!handleTurnError(e, "user", convId)) setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(false);
         abortRef.current = null;
@@ -416,7 +457,7 @@ export function useAgentChat({
       }
       return convId;
     },
-    [conversationId, busy, server, apiKey, model, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, onConversationsChanged],
+    [conversationId, busy, server, apiKey, model, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged],
   );
 
   /** Validate the submitted values host-side (untrusted iframe) and resume. */
@@ -471,13 +512,6 @@ export function useAgentChat({
     [resolvePendingForm, requestCancel],
   );
 
-  // Closing the pane on a pending form cancels it (same as the form's Cancel);
-  // otherwise it just dismisses a display-only app panel.
-  const onPaneClose = useCallback(async () => {
-    const st = conversationId != null ? await getConversationState(conversationId) : null;
-    if (pendingHitlCall(st)) requestCancel();
-    else setActivation(null);
-  }, [conversationId, requestCancel]);
 
   /** Deterministically open a form (debug bridge `/openform`). */
   const openFormBridge = useCallback(
@@ -499,7 +533,7 @@ export function useAgentChat({
         applyState(st);
         emitToolEvents(convId, st);
       } catch (e) {
-        setAssistantError(e instanceof Error ? e.message : String(e));
+        if (!handleTurnError(e, "debug-bridge", convId)) setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(false);
         await touchConversation(convId);
@@ -508,7 +542,7 @@ export function useAgentChat({
       const st = await getConversationState(convId);
       return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
     },
-    [busy, apiKey, model, server, conversationId, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, onConversationsChanged],
+    [busy, apiKey, model, server, conversationId, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged],
   );
 
   /** Debug bridge `/send`: run a turn, return the resulting transcript. */
@@ -561,7 +595,6 @@ export function useAgentChat({
     resetChat,
     startProjectChat,
     onAppContext,
-    onPaneClose,
     openFormBridge,
     sendBridge,
     submitBridge,

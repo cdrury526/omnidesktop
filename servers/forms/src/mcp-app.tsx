@@ -58,10 +58,10 @@ function Root() {
   const { app, error } = useApp({
     appInfo: { name: "Omni Forms", version: "0.1.0" },
     capabilities: {},
-    // The form fills the fixed-height side panel with a scrollable field area
-    // and a pinned footer, so we manage layout ourselves rather than letting
-    // the app auto-resize the iframe to content (which clips long forms).
-    autoResize: false,
+    // Auto-resize (default): the form flows at its natural content height and
+    // reports it to the host, which grows the inline iframe to fit — so the
+    // embed is never taller or shorter than the content. Spacing is driven by
+    // per-field padding in global.css, not by stretching to a fixed container.
     onAppCreated: (app) => {
       // The host forwards the tool arguments — our form spec — here.
       app.ontoolinput = (params) => {
