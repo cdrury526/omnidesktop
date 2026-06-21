@@ -4,7 +4,7 @@
  * server connection. The model picker now lives in the composer; this is for the
  * things you set once.
  */
-import { Alert, AutoComplete, Button, Form, Input, Space } from "antd";
+import { Alert, AutoComplete, Badge, Button, Form, Input, Space } from "antd";
 import type { FormItemProps } from "antd";
 import { keyringAvailable } from "../../lib/secrets";
 
@@ -81,10 +81,15 @@ export function SettingsPanel({
           validateStatus={connectError ? "error" : serverName ? "success" : undefined}
           help={
             !connectError && serverName ? (
-              <>
-                Connected to <strong>{serverName}</strong> · {toolCount} tool
-                {toolCount === 1 ? "" : "s"}
-              </>
+              <Badge
+                status="success"
+                text={
+                  <>
+                    <strong>{serverName}</strong> · {toolCount} tool
+                    {toolCount === 1 ? "" : "s"}
+                  </>
+                }
+              />
             ) : undefined
           }
         >
