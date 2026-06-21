@@ -5,6 +5,10 @@
   --text: light-dark(#1f2230, #ececf1);
   --muted: light-dark(#6b7280, #9aa0ad);
   --accent: light-dark(#4f46e5, #818cf8);
+  /* User chat bubble — a saturated indigo with white text that holds contrast
+     in both light and dark mode (distinct from the neutral assistant bubble). */
+  --user-bubble-bg: #4f46e5;
+  --user-bubble-text: #ffffff;
   --pane-width: clamp(360px, 42vw, 560px);
   color-scheme: light dark;
 }

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import { AutoComplete, Input } from "antd";
 import { Bubble, Sender, ThoughtChain } from "@ant-design/x";
-import { XMarkdown } from "@ant-design/x-markdown";
-import { markdownComponents } from "./components/MarkdownCode";
+import { AssistantMarkdown } from "./components/MarkdownCode";
 import { connectToServer, type ServerInfo } from "./mcp/host-bridge";
 import { type DisplayItem } from "./agent/runner";
 import { useDebugBridge } from "./lib/debug-bridge";
@@ -258,26 +257,21 @@ export default function App() {
     () => ({
       user: {
         placement: "end" as const,
+        // Distinct accent bubble (white text) so user turns read apart from the
+        // assistant's neutral filled bubble — in both light and dark mode.
+        styles: { content: { background: "var(--user-bubble-bg)", color: "var(--user-bubble-text)" } },
         contentRender: (content: unknown) => (
           <div className="bubble-user-text">{String(content ?? "")}</div>
         ),
       },
       assistant: {
         placement: "start" as const,
-        // XMarkdown's own streaming animation: block elements fade in as they're
-        // parsed from the stream (tied to real arrival, so it never throttles or
-        // crawls), with a tail cursor while the model is still generating.
-        // `status === "loading"` marks the actively-streaming bubble.
-        contentRender: (content: unknown, info: { status?: string }) => {
-          const live = info?.status === "loading";
-          return (
-            <XMarkdown
-              content={String(content ?? "")}
-              components={markdownComponents}
-              streaming={{ hasNextChunk: live, enableAnimation: true, tail: live }}
-            />
-          );
-        },
+        // Themed, streaming-animated markdown with code cards (AssistantMarkdown
+        // owns the theme class + dark code theme). `status === "loading"` marks
+        // the actively-streaming bubble.
+        contentRender: (content: unknown, info: { status?: string }) => (
+          <AssistantMarkdown content={String(content ?? "")} live={info?.status === "loading"} />
+        ),
       },
       tool: {
         placement: "start" as const,
