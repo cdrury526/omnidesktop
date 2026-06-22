@@ -193,13 +193,21 @@ function makeClient(apiKey: string): OpenRouter {
 }
 
 /**
- * Per-turn telemetry accumulated across a model call's tool loop (each step
- * fires `onTurnEnd`). Logged onto `turn.end` so token/cost/provider/latency are
- * visible in the event log per turn and per model — the data the OpenRouter
- * DevTools viewer shows, kept in our own libSQL timeline instead.
+ * Per-user-turn telemetry, read from the SDK's `result.getResponse()` — the
+ * documented "complete response object including usage information". A user turn
+ * can span more than one `callModel` (e.g. run + self-repair); each contributes
+ * its final response's usage into one accumulator. Logged onto `turn.end` so
+ * token/cost/latency are visible per turn and per model in our libSQL event
+ * timeline — the data the OpenRouter DevTools viewer shows, without its
+ * Node-only sidecar.
+ *
+ * Caveat: `getResponse()` exposes the *final* response's usage. A multi-step
+ * tool loop reports its last request's usage (not the sum of intermediate
+ * requests), and a turn that pauses for HITL never sets `finalResponse`, so it
+ * contributes nothing — both are SDK limitations, not worked around here.
  */
 export interface TurnTelemetry {
-  /** Model calls in this turn (a tool loop makes several). */
+  /** `callModel` invocations whose usage we captured this user turn. */
   calls: number;
   /** Model id the response reports (may differ from requested on fallback). */
   model?: string;
@@ -342,35 +350,26 @@ export interface RunTurnArgs {
   signal?: AbortSignal;
   /** Code mode: the conversation's working folder, injected into the prompt. */
   workingDir?: string;
-  /** Optional accumulator: per-step usage/cost/provider folded in via onTurnEnd. */
+  /** Optional accumulator: this call's final-response usage folded in via getResponse(). */
   telemetry?: TurnTelemetry;
 }
 
-/** onTurnEnd handler that folds each step's response into `telemetry` (no-op if
- *  none provided). Best-effort — never lets a telemetry error break the turn. */
-function turnEndCollector(telemetry?: TurnTelemetry) {
-  if (!telemetry) return undefined;
-  return (_ctx: unknown, response: unknown) => {
-    try { mergeTurnResponse(telemetry, response); } catch { /* ignore */ }
-  };
-}
-
 /**
- * Capture telemetry from the finished result. `onTurnEnd` (above) gives accurate
- * per-step totals when the SDK fires it; if it didn't (calls === 0), fall back
- * to `getResponse()` for the final response's usage. Best-effort and only when
- * the turn wasn't aborted — never blocks or throws into the turn.
+ * Fold this `callModel`'s final response usage into `telemetry` via the SDK's
+ * `getResponse()`. Best-effort and only when the turn wasn't aborted: a turn
+ * paused for HITL has no `finalResponse` (getResponse throws) and simply
+ * contributes nothing. Never blocks or throws into the turn.
  */
 async function captureTelemetry(
   result: { getResponse?: () => Promise<unknown> },
   telemetry?: TurnTelemetry,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!telemetry || telemetry.calls > 0 || signal?.aborted) return;
+  if (!telemetry || signal?.aborted) return;
   try {
     mergeTurnResponse(telemetry, await result.getResponse?.());
   } catch {
-    /* telemetry is best-effort */
+    /* telemetry is best-effort (e.g. HITL pause → no final response) */
   }
 }
 
@@ -398,7 +397,6 @@ export async function runTurn({
     tools,
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
-    onTurnEnd: turnEndCollector(telemetry),
   });
   wireAbort(result, signal);
   const text = await streamText(result, onTextDelta, signal);
@@ -509,7 +507,6 @@ export async function repairToolCall({
     tools,
     toolChoice: { type: "function", name: toolName } as never,
     stopWhen: stepCountIs(2),
-    onTurnEnd: turnEndCollector(telemetry),
   });
   wireAbort(result, signal);
   const text = await streamText(result, onTextDelta, signal);
@@ -530,7 +527,7 @@ export interface ResumeTurnArgs {
   signal?: AbortSignal;
   /** Code mode: the conversation's working folder, injected into the prompt. */
   workingDir?: string;
-  /** Optional accumulator: per-step usage/cost/provider folded in via onTurnEnd. */
+  /** Optional accumulator: this call's final-response usage folded in via getResponse(). */
   telemetry?: TurnTelemetry;
 }
 
@@ -558,7 +555,6 @@ export async function resumeTurn({
     tools,
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
-    onTurnEnd: turnEndCollector(telemetry),
   });
   wireAbort(result, signal);
   const text = await streamText(result, onTextDelta, signal);
