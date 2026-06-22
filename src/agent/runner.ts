@@ -192,6 +192,89 @@ function makeClient(apiKey: string): OpenRouter {
   });
 }
 
+/**
+ * Per-turn telemetry accumulated across a model call's tool loop (each step
+ * fires `onTurnEnd`). Logged onto `turn.end` so token/cost/provider/latency are
+ * visible in the event log per turn and per model — the data the OpenRouter
+ * DevTools viewer shows, kept in our own libSQL timeline instead.
+ */
+export interface TurnTelemetry {
+  /** Model calls in this turn (a tool loop makes several). */
+  calls: number;
+  /** Model id the response reports (may differ from requested on fallback). */
+  model?: string;
+  /** Upstream provider OpenRouter routed to — the field we lacked when the
+   *  deepseek-v4-flash leak hit (we knew the model, not who served it). */
+  provider?: string;
+  /** completed / incomplete / failed / … */
+  status?: string;
+  /** Why it stopped early, when incomplete (e.g. max_output_tokens). */
+  finishReason?: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  /** OpenRouter-reported cost (USD), summed across steps. */
+  cost: number;
+}
+
+export function emptyTelemetry(): TurnTelemetry {
+  return { calls: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedTokens: 0, reasoningTokens: 0, cost: 0 };
+}
+
+/** Fold one turn's response into the accumulator. Best-effort: tolerant of
+ *  missing usage (some models/providers don't report it). */
+export function mergeTurnResponse(acc: TurnTelemetry, response: unknown): void {
+  const r = response as {
+    model?: string;
+    status?: unknown;
+    incompleteDetails?: { reason?: string } | null;
+    openrouterMetadata?: { attempts?: Array<{ provider?: string }> };
+    usage?: {
+      inputTokens?: number; outputTokens?: number; totalTokens?: number; cost?: number;
+      inputTokensDetails?: { cachedTokens?: number };
+      outputTokensDetails?: { reasoningTokens?: number };
+    } | null;
+  };
+  acc.calls += 1;
+  if (typeof r.model === "string") acc.model = r.model;
+  if (typeof r.status === "string") acc.status = r.status;
+  if (r.incompleteDetails?.reason) acc.finishReason = r.incompleteDetails.reason;
+  const attempts = r.openrouterMetadata?.attempts;
+  if (Array.isArray(attempts) && attempts.length) {
+    acc.provider = attempts[attempts.length - 1]?.provider ?? acc.provider;
+  }
+  const u = r.usage;
+  if (u) {
+    acc.inputTokens += u.inputTokens ?? 0;
+    acc.outputTokens += u.outputTokens ?? 0;
+    acc.totalTokens += u.totalTokens ?? 0;
+    acc.cachedTokens += u.inputTokensDetails?.cachedTokens ?? 0;
+    acc.reasoningTokens += u.outputTokensDetails?.reasoningTokens ?? 0;
+    acc.cost += u.cost ?? 0;
+  }
+}
+
+/** Compact, log-friendly view of accumulated telemetry (drops empties). */
+export function telemetryData(t: TurnTelemetry): Record<string, unknown> {
+  if (t.calls === 0) return {};
+  const out: Record<string, unknown> = {
+    calls: t.calls,
+    inputTokens: t.inputTokens,
+    outputTokens: t.outputTokens,
+    totalTokens: t.totalTokens,
+  };
+  if (t.model) out.usedModel = t.model;
+  if (t.provider) out.provider = t.provider;
+  if (t.status) out.status = t.status;
+  if (t.finishReason) out.finishReason = t.finishReason;
+  if (t.cachedTokens) out.cachedTokens = t.cachedTokens;
+  if (t.reasoningTokens) out.reasoningTokens = t.reasoningTokens;
+  if (t.cost) out.cost = t.cost;
+  return out;
+}
+
 /** Wire an external abort signal to the SDK's cooperative `result.cancel()`. */
 function wireAbort(result: { cancel: () => Promise<void> }, signal?: AbortSignal): void {
   if (!signal) return;
@@ -259,6 +342,36 @@ export interface RunTurnArgs {
   signal?: AbortSignal;
   /** Code mode: the conversation's working folder, injected into the prompt. */
   workingDir?: string;
+  /** Optional accumulator: per-step usage/cost/provider folded in via onTurnEnd. */
+  telemetry?: TurnTelemetry;
+}
+
+/** onTurnEnd handler that folds each step's response into `telemetry` (no-op if
+ *  none provided). Best-effort — never lets a telemetry error break the turn. */
+function turnEndCollector(telemetry?: TurnTelemetry) {
+  if (!telemetry) return undefined;
+  return (_ctx: unknown, response: unknown) => {
+    try { mergeTurnResponse(telemetry, response); } catch { /* ignore */ }
+  };
+}
+
+/**
+ * Capture telemetry from the finished result. `onTurnEnd` (above) gives accurate
+ * per-step totals when the SDK fires it; if it didn't (calls === 0), fall back
+ * to `getResponse()` for the final response's usage. Best-effort and only when
+ * the turn wasn't aborted — never blocks or throws into the turn.
+ */
+async function captureTelemetry(
+  result: { getResponse?: () => Promise<unknown> },
+  telemetry?: TurnTelemetry,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!telemetry || telemetry.calls > 0 || signal?.aborted) return;
+  try {
+    mergeTurnResponse(telemetry, await result.getResponse?.());
+  } catch {
+    /* telemetry is best-effort */
+  }
 }
 
 /** Run one user turn; streams assistant text via onTextDelta, returns full text. */
@@ -271,6 +384,7 @@ export async function runTurn({
   onTextDelta,
   signal,
   workingDir,
+  telemetry,
 }: RunTurnArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
@@ -284,9 +398,12 @@ export async function runTurn({
     tools,
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
+    onTurnEnd: turnEndCollector(telemetry),
   });
   wireAbort(result, signal);
-  return streamText(result, onTextDelta, signal);
+  const text = await streamText(result, onTextDelta, signal);
+  await captureTelemetry(result, telemetry, signal);
+  return text;
 }
 
 export interface OpenFormArgs {
@@ -360,6 +477,8 @@ export interface RepairArgs {
   signal?: AbortSignal;
   /** Code mode: the conversation's working folder, injected into the prompt. */
   workingDir?: string;
+  /** Optional accumulator: folds this repair call's usage into the turn total. */
+  telemetry?: TurnTelemetry;
 }
 
 /** Re-prompt the model with the tool forced, after it described instead of calling. */
@@ -372,6 +491,7 @@ export async function repairToolCall({
   onTextDelta,
   signal,
   workingDir,
+  telemetry,
 }: RepairArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
@@ -389,9 +509,12 @@ export async function repairToolCall({
     tools,
     toolChoice: { type: "function", name: toolName } as never,
     stopWhen: stepCountIs(2),
+    onTurnEnd: turnEndCollector(telemetry),
   });
   wireAbort(result, signal);
-  return streamText(result, onTextDelta, signal);
+  const text = await streamText(result, onTextDelta, signal);
+  await captureTelemetry(result, telemetry, signal);
+  return text;
 }
 
 export interface ResumeTurnArgs {
@@ -407,6 +530,8 @@ export interface ResumeTurnArgs {
   signal?: AbortSignal;
   /** Code mode: the conversation's working folder, injected into the prompt. */
   workingDir?: string;
+  /** Optional accumulator: per-step usage/cost/provider folded in via onTurnEnd. */
+  telemetry?: TurnTelemetry;
 }
 
 /** Resume a HITL-paused conversation by supplying a paused call's result. */
@@ -420,6 +545,7 @@ export async function resumeTurn({
   onTextDelta,
   signal,
   workingDir,
+  telemetry,
 }: ResumeTurnArgs): Promise<string> {
   const or = makeClient(apiKey);
   const result = or.callModel({
@@ -432,9 +558,12 @@ export async function resumeTurn({
     tools,
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
+    onTurnEnd: turnEndCollector(telemetry),
   });
   wireAbort(result, signal);
-  return streamText(result, onTextDelta, signal);
+  const text = await streamText(result, onTextDelta, signal);
+  await captureTelemetry(result, telemetry, signal);
+  return text;
 }
 
 // ---- reading persisted state for the UI ----

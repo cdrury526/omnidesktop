@@ -28,6 +28,8 @@ import {
   pendingHitlCall,
   toolCardsFromState,
   toolResultDetail,
+  emptyTelemetry,
+  telemetryData,
   LeakedToolCallError,
   type DisplayItem,
 } from "../agent/runner";
@@ -353,14 +355,15 @@ export function useAgentChat({
       const tools = server ? buildMcpTools(server, summonPanel) : [];
       const state = conversationStateAccessor(convId);
       const workingDir = activeWorkingDir();
+      const telemetry = emptyTelemetry();
       try {
-        await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir });
+        await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir, telemetry });
         let st = await getConversationState(convId);
         // Self-repair: if the model described a form but didn't call the tool,
         // re-prompt once with the tool forced (only when the forms tool exists).
         if (!controller.signal.aborted && server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
           logEvent({ source: "repair", type: "repair.fired", conversationId: convId });
-          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir });
+          await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir, telemetry });
           st = await getConversationState(convId);
         }
         // Reconcile with persisted state (surfaces tool cards). The panel, if a
@@ -369,9 +372,9 @@ export function useAgentChat({
         emitToolEvents(convId, st);
         const ms = Math.round(performance.now() - startedAt);
         if (controller.signal.aborted) {
-          logEvent({ source, type: "turn.cancelled", conversationId: convId, data: { ms } });
+          logEvent({ source, type: "turn.cancelled", conversationId: convId, data: { ms, ...telemetryData(telemetry) } });
         } else {
-          logEvent({ source, type: "turn.end", conversationId: convId, data: { ms, formOpened: !!pendingHitlCall(st) } });
+          logEvent({ source, type: "turn.end", conversationId: convId, data: { ms, formOpened: !!pendingHitlCall(st), ...telemetryData(telemetry) } });
         }
       } catch (e) {
         if (!handleTurnError(e, source, convId)) {
@@ -450,12 +453,14 @@ export function useAgentChat({
 
       const accessor = conversationStateAccessor(convId);
       const tools = server ? buildMcpTools(server, summonPanel) : [];
+      const telemetry = emptyTelemetry();
       try {
-        await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir: activeWorkingDir() });
+        await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir: activeWorkingDir(), telemetry });
         const st = await getConversationState(convId);
         applyState(st);
         emitToolEvents(convId, st);
-        if (controller.signal.aborted) logEvent({ source: "user", type: "turn.cancelled", conversationId: convId });
+        if (controller.signal.aborted) logEvent({ source: "user", type: "turn.cancelled", conversationId: convId, data: telemetryData(telemetry) });
+        else logEvent({ source: "user", type: "turn.end", conversationId: convId, data: { resumed: true, ...telemetryData(telemetry) } });
       } catch (e) {
         if (!handleTurnError(e, "user", convId)) setAssistantError(e instanceof Error ? e.message : String(e));
       } finally {
