@@ -370,11 +370,12 @@ The chat→coding workspace is being built in phases (Stitch renders in
 - **Phase 4** — **split polish**. The fixed grid became an antd `Splitter` with
   draggable panes and persisted ratio (`settings.split_ratio`). Inline MCP Apps
   remain per-transcript, so split mode does not steal a form from another tab.
-  Verification note: the debug bridge has no pointer-drag endpoint, so the
-  rendered `Splitter`/handle and split enter/exit were bridge-verified via
-  `/dom`, while actual handle dragging was covered by typecheck/build against
-  antd's controlled `Splitter` API. `/snapshot` currently fails on an
-  html2canvas color parser issue; prefer computed `/dom` layout evidence here.
+  Verification note: the debug bridge now has `POST /drag` for host pointer
+  drags (e.g. `.ant-splitter-bar-dragger`) and `/snapshot` sanitizes modern CSS
+  colors before html2canvas capture, falling back to a simpler DOM canvas if
+  html2canvas still rejects a modern color. Prefer computed `/dom` layout
+  evidence for cross-origin iframes; snapshots still cannot see inside MCP App
+  iframes.
 
 ## Backlog
 

@@ -97,6 +97,8 @@ curl -sS -X POST http://127.0.0.1:1456/press -H 'content-type: application/json'
   -d '{"selector":".composer textarea","key":"Enter"}'   # drives the REAL send path
 curl -sS -X POST http://127.0.0.1:1456/click -H 'content-type: application/json' \
   -d '{"selector":".app-pane-close"}'                     # or any host button / Ant Modal btn
+curl -sS -X POST http://127.0.0.1:1456/drag -H 'content-type: application/json' \
+  -d '{"selector":".ant-splitter-bar-dragger","dx":180,"dy":0,"steps":12}' # host pointer drag
 
 # --- user input INSIDE the cross-origin form iframe (needs OMNI_DEBUG, see below) ---
 curl -sS -X POST http://127.0.0.1:1456/forminput -H 'content-type: application/json' \
@@ -111,8 +113,10 @@ curl -sS 'http://127.0.0.1:1456/dom?selector=.app-pane-surface%20iframe'
 # cannot pierce it, so the form app reports its own metrics via sendLog)
 curl -sS http://127.0.0.1:1456/formdom
 
-# html2canvas PNG of the host UI -> snapshots/ (note: the cross-origin form
-# iframe renders BLANK in snapshots — use /dom and /formdom for form layout)
+# PNG of the host UI -> snapshots/ (note: the cross-origin form iframe renders
+# BLANK in snapshots — use /dom and /formdom for form layout). The bridge first
+# tries html2canvas with sanitized CSS; if html2canvas hits unsupported modern
+# CSS color parsing, it saves a simpler fallback canvas instead of failing.
 curl -sS http://127.0.0.1:1456/snapshot
 ```
 

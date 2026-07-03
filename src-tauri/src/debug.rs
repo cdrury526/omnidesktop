@@ -13,6 +13,7 @@
 //!   POST /submit   {values}           -> resolve the pending HITL form
 //!   POST /cancel                       -> cancel the pending HITL form
 //!   POST /click    {selector}         -> synthetic click on a host element
+//!   POST /drag     {selector,dx,dy}   -> synthetic pointer drag on host element
 //!   POST /type     {selector,text}    -> set a host input's value (React-aware)
 //!   POST /press    {key,selector?}    -> synthetic keydown/keyup on the host
 //!   POST /forminput {id,value}        -> set a field inside the form iframe
@@ -314,6 +315,7 @@ fn handle_request(mut request: tiny_http::Request, app: &tauri::AppHandle) {
         ("POST", "/cancel") => wait(app, "cancel", json!({})),
         // Synthetic user input on the HOST document.
         ("POST", "/click") => wait(app, "click", read_body(&mut request)),
+        ("POST", "/drag") => wait(app, "drag", read_body(&mut request)),
         ("POST", "/type") => wait(app, "type", read_body(&mut request)),
         ("POST", "/press") => wait(app, "press", read_body(&mut request)),
         // Form-interior input (the form app long-polls /form-poll and acks).
