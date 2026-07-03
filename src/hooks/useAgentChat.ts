@@ -17,6 +17,7 @@ import {
   type ToolCallInfo,
   type ModelContext,
 } from "../mcp/host-bridge";
+import type { UseAgentChatArgs } from "./useAgentChatTypes";
 import {
   buildMcpTools,
   runTurn,
@@ -47,18 +48,8 @@ import {
   logFormEvent,
   touchConversation,
 } from "../lib/db";
-
-interface UseAgentChatArgs {
-  apiKey: string;
-  model: string;
-  server: ServerInfo | null;
-  conversationId: number | null;
-  setConversationId: (id: number | null) => void;
-  /** Refresh the conversation list (recency) after a turn touches a chat. */
-  onConversationsChanged: () => void;
-  /** Surface a "need key/model" message in App's connection error banner. */
-  setConnError: (msg: string | null) => void;
-}
+import { TOOLCALL_LEAK_NOTICE } from "./agentChatErrors";
+import { bridgeResolutionTranscript, bridgeTranscript } from "./agentChatBridge";
 
 export function useAgentChat({
   apiKey,
@@ -307,10 +298,6 @@ export function useAgentChat({
    * notice instead of the garbled tokens; anything else is a normal error.
    * Returns true when it handled a leak (so callers can skip generic logging).
    */
-  const TOOLCALL_LEAK_NOTICE =
-    "⚠️ This model returned a malformed tool call — it streamed a raw tool-call " +
-    "template into the chat instead of invoking the tool, so the turn was stopped. " +
-    "Switch to a model with reliable tool-calling (e.g. an Anthropic or OpenAI model).";
   const handleTurnError = useCallback(
     (e: unknown, source: EventSource, convId: number | null): boolean => {
       if (e instanceof LeakedToolCallError) {
@@ -526,7 +513,6 @@ export function useAgentChat({
     [resolvePendingForm, requestCancel],
   );
 
-
   /** Deterministically open a form (debug bridge `/openform`). */
   const openFormBridge = useCallback(
     async (spec: unknown) => {
@@ -553,8 +539,7 @@ export function useAgentChat({
         await touchConversation(convId);
         onConversationsChanged();
       }
-      const st = await getConversationState(convId);
-      return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+      return bridgeTranscript(convId);
     },
     [busy, apiKey, model, server, conversationId, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged],
   );
@@ -562,22 +547,19 @@ export function useAgentChat({
   /** Debug bridge `/send`: run a turn, return the resulting transcript. */
   const sendBridge = useCallback(async (text: string) => {
     const convId = await runUserTurn(text, "debug-bridge");
-    const st = convId != null ? await getConversationState(convId) : null;
-    return { conversationId: convId, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    return bridgeTranscript(convId);
   }, [runUserTurn]);
 
   /** Debug bridge `/submit`: resolve the pending form, return the transcript. */
   const submitBridge = useCallback(async (values: Record<string, unknown>) => {
     const convId = await resolvePendingForm(values);
-    const st = convId != null ? await getConversationState(convId) : null;
-    return { resolved: convId != null, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    return bridgeResolutionTranscript("resolved", convId);
   }, [resolvePendingForm]);
 
   /** Debug bridge `/cancel`: cancel the pending form, return the transcript. */
   const cancelBridge = useCallback(async () => {
     const convId = await cancelPendingForm();
-    const st = convId != null ? await getConversationState(convId) : null;
-    return { cancelled: convId != null, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
+    return bridgeResolutionTranscript("cancelled", convId);
   }, [cancelPendingForm]);
 
   /** The chat-portion of the debug bridge's `/state` snapshot. */
