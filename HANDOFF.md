@@ -15,17 +15,29 @@ Verified live: model picker, keyring, MCP connect, agent tool-calling,
 interactive forms (HITL) with durable pause/resume, message queuing, cancel,
 **inline MCP Apps** (render / submit / cancel / content-hug sizing / cleanup).
 
-## ▶ NEXT TASK — Split-view polish (unblocked)
+## ▶ NEXT TASKS — roadmap for future sessions
 
-Inline MCP Apps landed (commit `5e055728`), so split view is no longer blocked
-on MCP UI placement. Remaining:
+The app is working end-to-end as a local AI desktop/workspace shell. The next
+sessions should move in this order:
 
-- **Split polish:** draggable ratio (antd `Splitter`), persist layout in
-  `settings`. (Two-pane QA with a form open in one session + streaming in the
-  other already passes — inline forms live in their own transcript, so there's
-  no pane-steal or column collapse.)
-- **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`): `buildCodeTools`,
-  Rust path scoping, HITL for writes/exec.
+1. **Split-view polish** — draggable ratio with antd `Splitter`, persist the
+   ratio in `settings`, then bridge-verify two active sessions (form open in one
+   pane, streaming in the other). Inline MCP Apps removed the old pane-steal /
+   column-collapse blocker; this is now layout polish.
+2. **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`) — add
+   Rust-scoped `list_dir` / `read_file` first, then gated `write_file` /
+   `run_command` with HITL approval and event logging. The current Code mode is
+   prompt/context only; Rust currently exposes only `path_is_dir`.
+3. **Refactor agent internals before piling on tool logic** — split
+   `src/agent/runner.ts` and `src/hooks/useAgentChat.ts` back under the 600-line
+   repo rule. Do this before filesystem tools get large.
+4. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
+   server manager UI, and real empty/error states for the Tools / Agents /
+   Commands rail sections.
+5. **Production hardening** — production sandbox sidecar, bundle splitting,
+   README/release packaging sanity checks.
+6. **Sync later** — Turso/cloud sync should wait until the local coding workflow
+   is solid.
 
 ## ✅ DONE — Inline MCP Apps in the transcript (commit `5e055728`)
 
@@ -69,11 +81,11 @@ tool-calling model (Anthropic/OpenAI/Gemini) for forms.
 
 ---
 
-## Code mode — first slice DONE; local follow-ups (uncommitted)
+## Code mode — first slice DONE
 
-The **Code mode first slice** landed in commit `0cdeeea`. Additional local work
-(not yet committed) includes: tabs persisted in DB (`0003`), missing-folder
-read-only chats, auto MCP connect + `mcp.connect.*` events, split view.
+The **Code mode first slice** landed in commit `0cdeeea`; follow-on workspace
+work then added tabs persisted in DB (`0003`), missing-folder read-only chats,
+auto MCP connect + `mcp.connect.*` events, and split view.
 
 ### First slice (commit `0cdeeea`)
 - Migration `0002` — `code_mode` + `working_dir` columns on `conversations`
@@ -364,36 +376,23 @@ The chat→coding workspace is being built in phases (Stitch renders in
 
 ## Backlog
 
-- **Migrate hand-rolled controls to antd (known debt + user preference).** A
-  chunk of the rail/tabs work was hand-rolled and should move onto antd
-  primitives (see the hard rule in CLAUDE.md / AGENTS.md): `TabBar` → `Tabs`,
-  `SideRail` items → `Menu`/`Segmented`+`Button`, `CodeModeToggle` folder chip →
-  `Tag`, `ProjectsPanel` session list → `List`, `SettingsPanel` fields → `Form`,
-  `App.tsx` `<button>`s (New chat / panel-close) → `Button`. The `TabBar`
-  (`src/components/TabBar.tsx`) is currently **hand-rolled** divs + CSS (only
-  `@ant-design/icons` from the Ant family). The
-  user wants the antd/X visual language preserved across the app, and — key
-  insight — we can usually still *use* the antd primitive even when its built-in
-  behavior doesn't fit, by opting out of the parts we don't want rather than
-  reimplementing. For the tabs specifically: use antd `<Tabs type="editable-card">`
-  purely as a **tab strip** — pass `items` with `key`/`label`/`icon` and **no
-  `children`**, drive it via `activeKey` + `onChange` (select) and `onEdit`
-  (close/add), and render the always-mounted `ChatSession`s **separately** below
-  it (hide Tabs' own empty content area). That keeps "tabs = navigation, sessions
-  render themselves" while inheriting antd's tokens, keyboard nav, overflow
-  dropdown, and theming. Only real cost: CSS/token overrides to get the flat
-  Stitch tab + 2px indigo underline (editable-card is rounded by default). Apply
-  the same "use the antd component as a shell, opt out of the behavior we don't
-  want" approach elsewhere before hand-rolling. (Ant Design X has no horizontal
-  tab component — `Conversations` is a vertical list — so antd core `Tabs` is the
-  primitive here.)
+- **Remaining antd cleanup.** Most shell debt is now migrated (`TabBar` uses
+  antd `Tabs`, `SideRail` uses `Menu`, `SettingsPanel` uses `Form`, app buttons
+  use `Button`). Remaining raw controls are mainly the queued-message remove
+  button in `ChatSession` and `servers/forms` wrappers/buttons/labels around
+  otherwise-antd inputs. Keep using antd/X primitives by default.
 - **Streaming smoothness (optional polish)** — streaming works (see correction
   up top); deltas arrive in bursts, so the bubble grows in chunks rather than
   per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
   reduce time-to-first-token with a snappier model. Not a bug.
-- **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md` (now next
-  up alongside split-view polish).
+- **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md`: scoped
+  Rust `list_dir` / `read_file`, then HITL-gated `write_file` / `run_command`.
+- **Agent internals split** — `runner.ts` and `useAgentChat.ts` are over the
+  600-line source-file limit; split before adding more agent/tool behavior.
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference
   the earlier result) — built + headless-verified, not yet eyeballed live.
-- Turso sync · production sandbox sidecar · MCP server manager UI · conversation
-  rename · code-split the 1MB+ JS bundle.
+- Productize workspace basics: conversation rename, retry/regenerate, MCP server
+  manager UI, real empty/error states for Tools / Agents / Commands.
+- Production hardening: sandbox sidecar, code-split the 1MB+ JS bundles,
+  README/release packaging sanity checks.
+- Turso sync / multi-device later, after the local coding workflow is solid.

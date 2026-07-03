@@ -2,7 +2,8 @@
 
 A native Linux desktop AI assistant (Tauri + React) that works with **any model**
 via [OpenRouter](https://openrouter.ai), and renders **interactive MCP App UIs**
-in a slide-out pane — forms, pickers, dashboards summoned by the model's tool calls.
+inline in the transcript — forms, pickers, dashboards summoned by the model's
+tool calls.
 
 The model only ever *calls a tool*; the host renders the UI deterministically
 from the tool's `ui://` resource. So rich, interactive panels work identically
@@ -16,10 +17,14 @@ across every tool-capable model — no per-provider UI code.
   arrives, code blocks rendered as copy-able cards with syntax highlighting, tool
   calls shown as expandable `ThoughtChain` steps, and a `Welcome` + starter
   `Prompts` empty state. Light/dark theme follows the OS.
-- **Auto-summoning app pane** — when the model calls a tool that ships an
-  [MCP App](https://modelcontextprotocol.io) UI, a sandboxed panel slides out and
-  renders it; results flow back into the conversation. Interactive forms (antd
-  inputs) pause the agent for human input and resume on submit — surviving reload.
+- **Inline MCP Apps** — when the model calls a tool that ships an
+  [MCP App](https://modelcontextprotocol.io) UI, a sandboxed iframe renders on
+  that tool card in the transcript; results flow back into the conversation.
+  Interactive forms (antd inputs) pause the agent for human input and resume on
+  submit — surviving reload.
+- **Workspace shell** — open multiple chats as tabs, keep background sessions
+  mounted while they stream, split the workspace into two panes, and group Code
+  mode chats by project folder.
 - **Secure by design** — the API key lives in the OS keyring; the DB and any cloud
   token stay behind the Rust boundary, never exposed to the webview that hosts the
   untrusted MCP App iframes (double-iframe, per-request CSP sandbox).
@@ -32,9 +37,9 @@ across every tool-capable model — no per-provider UI code.
 
 ```
 Tauri shell (native window)
-├─ React + Ant Design X ── streaming chat (Bubble · Sender · ThoughtChain ·
-│                          XMarkdown), model picker, history drawer
-├─ Slide-out App pane   ── sandboxed iframe rendering MCP App UIs
+├─ React + Ant Design X ── workspace tabs/split view; streaming chat
+│                          (Bubble · Sender · ThoughtChain · XMarkdown)
+├─ Inline MCP Apps     ── sandboxed iframe mounted on the tool card
 │     └─ cross-origin sandbox proxy (:1430) + AppBridge   [MCP Apps spec]
 ├─ OpenRouter agent SDK ── tool-calling loop; tool execute → MCP call → auto-summon
 │     └─ HTTP routed through Rust (Tauri http plugin) to avoid webview CORS
@@ -61,7 +66,7 @@ pnpm tauri dev      # starts Vite + the cross-origin sandbox proxy + the window
 ```
 
 Then in the app: pick a model, paste your OpenRouter API key (saved to the keyring),
-connect to an MCP server, and chat. To try the app pane, run an
+connect to an MCP server, and chat. To try an inline MCP App, run an
 [ext-apps](https://github.com/modelcontextprotocol/ext-apps) example server on
 `http://localhost:3001/mcp` and ask the model to use one of its tools.
 
@@ -76,8 +81,10 @@ connect to an MCP server, and chat. To try the app pane, run an
 | `src/App.tsx` | Host shell: connection, model/key, conversation list, render |
 | `src/hooks/useAgentChat.ts` | Chat session: transcript, composer, turn/HITL/queue/cancel |
 | `src/components/MarkdownCode.tsx` | Themed streaming Markdown + code cards (copy button) |
-| `src/components/AppPane.tsx` | Slide-out pane; drives the MCP App bridge lifecycle |
-| `src/components/HistoryDrawer.tsx` · `ChatWelcome.tsx` | History drawer · empty-state Welcome+Prompts |
+| `src/components/InlineAppMount.tsx` | Inline sandbox iframe for MCP App tool cards |
+| `src/components/TabBar.tsx` · `SideRail.tsx` | Workspace tabs/split controls · navigation rail |
+| `src/components/panels/HistoryPanel.tsx` · `ProjectsPanel.tsx` | History and project-folder panels |
+| `src/components/ChatWelcome.tsx` | Empty-state Welcome+Prompts |
 | `src/agent/runner.ts` | OpenRouter agent loop; MCP tools → SDK tools w/ auto-summon, cancel |
 | `src/mcp/host-bridge.ts` | MCP Apps host bridge (AppBridge wiring) |
 | `src/lib/db.ts` · `src/lib/secrets.ts` | DB + keyring frontend APIs |
@@ -86,9 +93,11 @@ connect to an MCP server, and chat. To try the app pane, run an
 
 ## Roadmap
 
-- Turso cloud sync (flag-flip in `src-tauri/Cargo.toml`)
-- Production cross-origin sandbox (run the proxy as a Tauri sidecar)
-- Regenerate/retry · `Conversations` sidebar · MCP server manager UI · conversation rename
+- Split-view polish: draggable pane ratio and persisted layout
+- Code mode filesystem tools: scoped read/list first, then gated write/command
+- Conversation rename · retry/regenerate · MCP server manager UI
+- Production cross-origin sandbox sidecar · bundle splitting
+- Turso cloud sync after the local coding workflow is solid
 
 ## Tech
 
