@@ -4,6 +4,33 @@
  * receives keyboard/debug-bridge input; in single mode it tracks `activeKey`.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getSetting, setSetting } from "../lib/db";
+
+const SPLIT_RATIO_SETTING = "split_ratio";
+const DEFAULT_SPLIT_SIZES: [string, string] = ["50%", "50%"];
+const MIN_RATIO = 20;
+const MAX_RATIO = 80;
+
+function clampRatio(n: number): number {
+  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, Math.round(n)));
+}
+
+function sizesFromRatio(ratio: number): [string, string] {
+  const first = clampRatio(ratio);
+  return [`${first}%`, `${100 - first}%`];
+}
+
+function ratioFromSizes(sizes: (number | string)[]): number | null {
+  const nums = sizes.map((s) => {
+    if (typeof s === "number") return s;
+    if (s.endsWith("%")) return Number.parseFloat(s);
+    return Number.parseFloat(s);
+  });
+  if (nums.length < 2 || !Number.isFinite(nums[0]) || !Number.isFinite(nums[1])) return null;
+  const total = nums[0] + nums[1];
+  if (total <= 0) return null;
+  return clampRatio((nums[0] / total) * 100);
+}
 
 export interface SplitLayout {
   mode: "single" | "split";
@@ -28,6 +55,21 @@ export function useSplitView({ activeKey, setActiveKey, tabKeys }: Args) {
     secondaryKey: null,
     focusKey: activeKey,
   }));
+  const [splitSizes, setSplitSizes] = useState<(number | string)[]>(DEFAULT_SPLIT_SIZES);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const raw = await getSetting(SPLIT_RATIO_SETTING);
+      const ratio = raw == null ? null : Number(raw);
+      if (!cancelled && ratio != null && Number.isFinite(ratio)) {
+        setSplitSizes(sizesFromRatio(ratio));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Keep primary/focus aligned when the shell picks a new active tab in single mode.
   useEffect(() => {
@@ -128,6 +170,16 @@ export function useSplitView({ activeKey, setActiveKey, tabKeys }: Args) {
     [tabKeys, activeKey],
   );
 
+  const onResize = useCallback((sizes: (number | string)[]) => {
+    setSplitSizes(sizes);
+  }, []);
+
+  const onResizeEnd = useCallback((sizes: (number | string)[]) => {
+    setSplitSizes(sizes);
+    const ratio = ratioFromSizes(sizes);
+    if (ratio != null) void setSetting(SPLIT_RATIO_SETTING, String(ratio));
+  }, []);
+
   return {
     layout,
     isSplit,
@@ -140,5 +192,8 @@ export function useSplitView({ activeKey, setActiveKey, tabKeys }: Args) {
     onTabSelect,
     onTabClosed,
     splitCandidates,
+    splitSizes,
+    onResize,
+    onResizeEnd,
   };
 }

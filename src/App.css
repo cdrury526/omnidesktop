@@ -48,14 +48,31 @@ html, body, #root {
   position: relative;
 }
 .sessions.is-split {
-  display: grid;
-  grid-template-columns: 1fr 1px 1fr;
-  grid-template-rows: minmax(0, 1fr);
+  display: block;
 }
-.sessions.is-split .split-gutter {
-  grid-column: 2;
-  grid-row: 1;
+.workspace-splitter {
+  height: 100%;
+  width: 100%;
+}
+.workspace-splitter .ant-splitter-panel {
+  min-width: 0;
+  min-height: 0;
+}
+.workspace-splitter .ant-splitter-bar {
   background: var(--border);
+}
+.workspace-splitter .ant-splitter-bar:hover,
+.workspace-splitter .ant-splitter-bar-active {
+  background: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.split-pane-content {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.session-hidden-stage {
+  display: none;
 }
 .chat-session {
   flex: 1;
@@ -69,14 +86,6 @@ html, body, #root {
 }
 .sessions:not(.is-split) .chat-session.visible {
   flex: 1;
-}
-.sessions.is-split .chat-session.visible.split-primary {
-  grid-column: 1;
-  grid-row: 1;
-}
-.sessions.is-split .chat-session.visible.split-secondary {
-  grid-column: 3;
-  grid-row: 1;
 }
 .sessions.is-split .chat-session.focused .session-main {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);

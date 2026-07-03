@@ -93,7 +93,6 @@ connect to an MCP server, and chat. To try an inline MCP App, run an
 
 ## Roadmap
 
-- Split-view polish: draggable pane ratio and persisted layout
 - Code mode filesystem tools: scoped read/list first, then gated write/command
 - Conversation rename · retry/regenerate · MCP server manager UI
 - Production cross-origin sandbox sidecar · bundle splitting

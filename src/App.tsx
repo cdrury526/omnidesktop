@@ -12,7 +12,7 @@ import { useSplitView } from "./hooks/useSplitView";
 import { useMcpConnection } from "./hooks/useMcpConnection";
 import { getApiKey, saveApiKey, deleteApiKey } from "./lib/secrets";
 import { getSetting, setSetting, listConversations, deleteConversation, type ConversationRow } from "./lib/db";
-import { Button, Flex, Typography } from "antd";
+import { Button, Flex, Splitter, Typography } from "antd";
 import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import "./App.css";
 
@@ -182,6 +182,42 @@ export default function App() {
     return null;
   }
 
+  const renderSession = (t: (typeof tabs)[number]) => {
+    const key = String(t.id);
+    return (
+      <ChatSession
+        key={t.id}
+        tabKey={key}
+        visible={split.isVisible(key)}
+        focused={split.focusKey === key}
+        splitRole={split.splitRole(key)}
+        onFocusPane={() => split.setFocusKey(key)}
+        apiKey={apiKey}
+        model={model}
+        onModelChange={onModelChange}
+        server={server}
+        onConversationsChanged={refreshConversations}
+        initialConversationId={t.initialConversationId}
+        initialWorkingDir={t.initialWorkingDir}
+        onMeta={handleMeta}
+        registerBridge={registerBridge}
+      />
+    );
+  };
+
+  const primaryTab = split.isSplit
+    ? tabs.find((t) => String(t.id) === split.layout.primaryKey)
+    : null;
+  const secondaryTab = split.isSplit
+    ? tabs.find((t) => String(t.id) === split.layout.secondaryKey)
+    : null;
+  const hiddenSplitTabs = split.isSplit
+    ? tabs.filter((t) => {
+        const key = String(t.id);
+        return key !== split.layout.primaryKey && key !== split.layout.secondaryKey;
+      })
+    : [];
+
   return (
     <div className="layout">
       <SideRail
@@ -266,29 +302,27 @@ export default function App() {
         />
 
         <div className={`sessions${split.isSplit ? " is-split" : ""}`}>
-          {split.isSplit && <div className="split-gutter" aria-hidden />}
-          {tabs.map((t) => {
-            const key = String(t.id);
-            return (
-              <ChatSession
-                key={t.id}
-                tabKey={key}
-                visible={split.isVisible(key)}
-                focused={split.focusKey === key}
-                splitRole={split.splitRole(key)}
-                onFocusPane={() => split.setFocusKey(key)}
-                apiKey={apiKey}
-                model={model}
-                onModelChange={onModelChange}
-                server={server}
-                onConversationsChanged={refreshConversations}
-                initialConversationId={t.initialConversationId}
-                initialWorkingDir={t.initialWorkingDir}
-                onMeta={handleMeta}
-                registerBridge={registerBridge}
-              />
-            );
-          })}
+          {split.isSplit && primaryTab && secondaryTab ? (
+            <>
+              <Splitter
+                className="workspace-splitter"
+                onResize={split.onResize}
+                onResizeEnd={split.onResizeEnd}
+              >
+                <Splitter.Panel size={split.splitSizes[0]} min={280}>
+                  <div className="split-pane-content">{renderSession(primaryTab)}</div>
+                </Splitter.Panel>
+                <Splitter.Panel size={split.splitSizes[1]} min={280}>
+                  <div className="split-pane-content">{renderSession(secondaryTab)}</div>
+                </Splitter.Panel>
+              </Splitter>
+              <div className="session-hidden-stage" aria-hidden>
+                {hiddenSplitTabs.map(renderSession)}
+              </div>
+            </>
+          ) : (
+            tabs.map(renderSession)
+          )}
         </div>
       </main>
     </div>

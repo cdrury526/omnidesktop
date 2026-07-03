@@ -20,23 +20,19 @@ interactive forms (HITL) with durable pause/resume, message queuing, cancel,
 The app is working end-to-end as a local AI desktop/workspace shell. The next
 sessions should move in this order:
 
-1. **Split-view polish** — draggable ratio with antd `Splitter`, persist the
-   ratio in `settings`, then bridge-verify two active sessions (form open in one
-   pane, streaming in the other). Inline MCP Apps removed the old pane-steal /
-   column-collapse blocker; this is now layout polish.
-2. **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`) — add
+1. **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`) — add
    Rust-scoped `list_dir` / `read_file` first, then gated `write_file` /
    `run_command` with HITL approval and event logging. The current Code mode is
    prompt/context only; Rust currently exposes only `path_is_dir`.
-3. **Refactor agent internals before piling on tool logic** — split
+2. **Refactor agent internals before piling on tool logic** — split
    `src/agent/runner.ts` and `src/hooks/useAgentChat.ts` back under the 600-line
    repo rule. Do this before filesystem tools get large.
-4. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
+3. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
    server manager UI, and real empty/error states for the Tools / Agents /
    Commands rail sections.
-5. **Production hardening** — production sandbox sidecar, bundle splitting,
+4. **Production hardening** — production sandbox sidecar, bundle splitting,
    README/release packaging sanity checks.
-6. **Sync later** — Turso/cloud sync should wait until the local coding workflow
+5. **Sync later** — Turso/cloud sync should wait until the local coding workflow
    is solid.
 
 ## ✅ DONE — Inline MCP Apps in the transcript (commit `5e055728`)
@@ -353,7 +349,7 @@ All verified headlessly via the bridge unless noted.
   `tool.call`/`tool.result` events tied to `conversation_state` by `callId`.
   Read the timeline via `/events`. This is the "what happened and who did it" log.
 
-## Workspace shell — DONE through Phase 3 (split view, local)
+## Workspace shell — DONE through Phase 4 (split polish)
 
 The chat→coding workspace is being built in phases (Stitch renders in
 `stitch-renders/`). Shipped so far:
@@ -369,10 +365,11 @@ The chat→coding workspace is being built in phases (Stitch renders in
   registry, tab labels from session `meta` + the conversations list. MCP App UI
   renders **inline on its tool card** per session (`InlineAppMount`).
 - **Phase 3** — **split view**. `useSplitView` + `TabBar` split/merge controls;
-  two visible `ChatSession`s in a 50/50 grid; `focusKey` for debug-bridge
-  `/send`. Open tabs also persist in DB (migration `0003`). Now unblocked —
-  inline MCP Apps removed the slide-out pane that fought the split layout; only
-  polish (resize handle, persisted ratio) remains.
+  two visible `ChatSession`s in a 50/50 layout; `focusKey` for debug-bridge
+  `/send`. Open tabs also persist in DB (migration `0003`).
+- **Phase 4** — **split polish**. The fixed grid became an antd `Splitter` with
+  draggable panes and persisted ratio (`settings.split_ratio`). Inline MCP Apps
+  remain per-transcript, so split mode does not steal a form from another tab.
 
 ## Backlog
 
