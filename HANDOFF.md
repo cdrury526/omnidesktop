@@ -370,6 +370,11 @@ The chat→coding workspace is being built in phases (Stitch renders in
 - **Phase 4** — **split polish**. The fixed grid became an antd `Splitter` with
   draggable panes and persisted ratio (`settings.split_ratio`). Inline MCP Apps
   remain per-transcript, so split mode does not steal a form from another tab.
+  Verification note: the debug bridge has no pointer-drag endpoint, so the
+  rendered `Splitter`/handle and split enter/exit were bridge-verified via
+  `/dom`, while actual handle dragging was covered by typecheck/build against
+  antd's controlled `Splitter` API. `/snapshot` currently fails on an
+  html2canvas color parser issue; prefer computed `/dom` layout evidence here.
 
 ## Backlog
 
