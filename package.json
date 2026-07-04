@@ -17,6 +17,7 @@
     "docs:index": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- index",
     "docs:resolve": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- resolve",
     "docs:symbol": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- symbol",
+    "docs:related": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- related",
     "docs:open": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- open",
     "docs:open-chunk": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- open-chunk"
   },

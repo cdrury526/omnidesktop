@@ -64,6 +64,10 @@ pnpm docs:resolve --top3 events
 pnpm docs:symbol callModel
 pnpm docs:symbol createMCPTools
 
+# Related docs by hit id
+pnpm docs:related -- 10
+pnpm docs:related --json -- 10
+
 # Full content by hit id
 pnpm docs:open -- 42
 pnpm docs:open --json 42

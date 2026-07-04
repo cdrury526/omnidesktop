@@ -5,8 +5,8 @@ use clap::{Parser, Subcommand};
 use omni_desktop_lib::db;
 use omni_desktop_lib::docs::{
     find_symbols, ingest_mirror, ingest_root, list_categories, list_layers, list_mirrors,
-    list_pages, open_chunk, open_page, open_page_json, resolve_topic, search, search_chunks, stats,
-    IngestReport,
+    list_pages, open_chunk, open_page, open_page_json, related_pages, resolve_topic, search,
+    search_chunks, stats, IngestReport,
 };
 use std::path::PathBuf;
 
@@ -115,6 +115,15 @@ enum Command {
         #[arg(long, default_value_t = 12)]
         limit: u32,
         /// Emit JSON array of matches
+        #[arg(long)]
+        json: bool,
+    },
+    /// List same-mirror/category sibling documents for a page id
+    Related {
+        id: i64,
+        #[arg(long, default_value_t = 12)]
+        limit: u32,
+        /// Emit JSON array of related page metadata
         #[arg(long)]
         json: bool,
     },
@@ -383,6 +392,33 @@ async fn main() -> Result<(), String> {
                     hit.snippet,
                     hit.mirror,
                     hit.rel_path
+                );
+            }
+        }
+        Command::Related { id, limit, json } => {
+            let Some(pages) = related_pages(&database, id, limit).await? else {
+                return Err(format!("no document with id {id}"));
+            };
+            if json {
+                print_json(&pages)?;
+                return Ok(());
+            }
+            if pages.is_empty() {
+                println!("(no related documents)");
+                return Ok(());
+            }
+            for page in pages {
+                let title = page.title.as_deref().unwrap_or(&page.slug);
+                println!(
+                    "[{}] {}  {} / {} / {}  ({}b)\n  → {}/{}\n",
+                    page.id,
+                    title,
+                    page.mirror,
+                    page.layer,
+                    display_category(&page.category),
+                    page.bytes,
+                    page.mirror,
+                    page.rel_path
                 );
             }
         }

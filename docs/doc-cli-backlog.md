@@ -50,10 +50,10 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
   - `pnpm docs:find` wrapper.
   - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:find stopWhen | node -e ...`; `pnpm docs:find --mirror openrouter-agent-sdk stopWhen | node -e ...`; `pnpm docs:search --paths-only stopWhen | node -e ...`.
 
-- [ ] **8. `related <id>`**
+- [x] **8. `related <id>`**
   - Same `mirror` + `category` siblings (or shared tags later).
   - Surfaces “also read” docs after a hit.
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `OMNI_DB=data/omni.db pnpm docs:related -- 10 | node -e ...`; `OMNI_DB=data/omni.db pnpm docs:related --json -- 10 | node -e ...`.
 
 - [ ] **9. Watch + re-ingest**
   - `docs:watch` on `docs/` (debounced file watcher → incremental or full re-ingest).
