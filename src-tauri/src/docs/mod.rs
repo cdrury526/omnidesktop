@@ -10,6 +10,7 @@ mod related;
 mod resolve;
 mod search;
 mod symbol;
+mod watch;
 
 pub use ingest::{ingest_mirror, ingest_root, IngestReport};
 pub use related::related_pages;
@@ -19,3 +20,4 @@ pub use search::{
     search, search_chunks, stats, DocChunk, DocChunkHit, DocHit, DocMeta, DocPage,
 };
 pub use symbol::{find_symbols, SymbolHit};
+pub use watch::{watch_ingest_path, WatchIngestReason};

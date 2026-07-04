@@ -6,9 +6,10 @@ use omni_desktop_lib::db;
 use omni_desktop_lib::docs::{
     find_symbols, ingest_mirror, ingest_root, list_categories, list_layers, list_mirrors,
     list_pages, open_chunk, open_page, open_page_json, related_pages, resolve_topic, search,
-    search_chunks, stats, IngestReport,
+    search_chunks, stats, watch_ingest_path, IngestReport, WatchIngestReason,
 };
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Parser)]
 #[command(
@@ -31,6 +32,18 @@ enum Command {
         /// Mirror root or parent `docs/` directory
         #[arg(default_value = "docs")]
         path: PathBuf,
+    },
+    /// Watch docs/ and re-ingest after debounced file changes
+    Watch {
+        /// Mirror root or parent `docs/` directory
+        #[arg(default_value = "docs")]
+        path: PathBuf,
+        /// Poll interval in milliseconds
+        #[arg(long, default_value_t = 1000)]
+        poll_ms: u64,
+        /// Stable window before re-ingest in milliseconds
+        #[arg(long, default_value_t = 750)]
+        debounce_ms: u64,
     },
     /// Full-text search (returns excerpts, not full files)
     Search {
@@ -154,6 +167,37 @@ async fn main() -> Result<(), String> {
             for r in reports {
                 print_report(&r);
             }
+        }
+        Command::Watch {
+            path,
+            poll_ms,
+            debounce_ms,
+        } => {
+            println!(
+                "watching {} (poll={}ms debounce={}ms)",
+                path.display(),
+                poll_ms,
+                debounce_ms
+            );
+            watch_ingest_path(
+                &database,
+                &path,
+                Duration::from_millis(poll_ms),
+                Duration::from_millis(debounce_ms),
+                |reason, reports| {
+                    match reason {
+                        WatchIngestReason::Initial => println!("initial ingest"),
+                        WatchIngestReason::Changed => println!("change detected; re-ingested"),
+                    }
+                    if reports.is_empty() {
+                        println!("no mirrors found under {}", path.display());
+                    }
+                    for report in reports {
+                        print_report(report);
+                    }
+                },
+            )
+            .await?;
         }
         Command::Search {
             query,

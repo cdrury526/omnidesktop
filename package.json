@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "docs:ingest": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- ingest docs",
+    "docs:watch": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- watch",
     "docs:search": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- search",
     "docs:find": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- find",
     "docs:list": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- list",

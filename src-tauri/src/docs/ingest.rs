@@ -157,7 +157,7 @@ pub async fn ingest_mirror(db: &Db, mirror_root: &Path) -> Result<IngestReport, 
     Ok(report)
 }
 
-fn is_mirror(path: &Path) -> bool {
+pub(super) fn is_mirror(path: &Path) -> bool {
     path.join("_provenance").is_dir() || LAYERS.iter().any(|layer| path.join(layer).is_dir())
 }
 

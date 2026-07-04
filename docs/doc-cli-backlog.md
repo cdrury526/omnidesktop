@@ -55,10 +55,10 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
   - Surfaces “also read” docs after a hit.
   - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `OMNI_DB=data/omni.db pnpm docs:related -- 10 | node -e ...`; `OMNI_DB=data/omni.db pnpm docs:related --json -- 10 | node -e ...`.
 
-- [ ] **9. Watch + re-ingest**
+- [x] **9. Watch + re-ingest**
   - `docs:watch` on `docs/` (debounced file watcher → incremental or full re-ingest).
   - Dev convenience when mirrors are refreshed.
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `timeout 40s bash -c 'env OMNI_DB=data/omni.db pnpm docs:watch docs/openrouter-agent-sdk --poll-ms 250 --debounce-ms 250 ...' | node -e ...`; `./node_modules/.bin/tsc --noEmit`; `./node_modules/.bin/vite build`; `cargo build --manifest-path src-tauri/Cargo.toml`.
 
 - [ ] **10. AGENTS.md / agent workflow blurb**
   - Standing instruction: before OpenRouter/AG-UI work, run `pnpm docs:search` / `docs:index --compact`.

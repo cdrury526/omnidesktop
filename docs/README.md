@@ -37,6 +37,7 @@ Ingest derives metadata from path segments:
 ```bash
 # Index all mirrors (uses ./data/omni.db by default, or app data dir if present)
 pnpm docs:ingest
+pnpm docs:watch
 
 # Search — excerpts only, token-efficient
 pnpm docs:search -- stopWhen
