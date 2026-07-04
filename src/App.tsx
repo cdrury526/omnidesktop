@@ -24,6 +24,7 @@ import {
   type ToolRegistryRow,
 } from "./lib/db";
 import { loadActiveToolRegistry, syncToolRegistry } from "./lib/tool-registry";
+import { getToolUsageReport } from "./lib/tool-usage";
 import { Button, Flex, Splitter, Typography } from "antd";
 import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import "./App.css";
@@ -226,6 +227,7 @@ export default function App() {
     approve: async (callIds) => (await activeHandlers()?.approve(callIds)) ?? { error: "no active session" },
     reject: async (callIds) => (await activeHandlers()?.reject(callIds)) ?? { error: "no active session" },
     state: async () => (await activeHandlers()?.state()) ?? { error: "no active session" },
+    toolusage: async (params) => getToolUsageReport(params),
   });
 
   const toolCount = server ? server.tools.size : 0;

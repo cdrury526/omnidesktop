@@ -16,7 +16,7 @@ import { getLatestFormMetrics } from "../mcp/host-bridge";
 import { logEvent, getEvents } from "./events";
 
 // Read-only pokes we don't log (they're frequent and would drown the timeline).
-const QUIET_ACTIONS = new Set(["state", "dom", "formdom", "events", "health"]);
+const QUIET_ACTIONS = new Set(["state", "dom", "formdom", "events", "toolusage", "health"]);
 
 export interface DebugHandles {
   /** Connect to an MCP server URL (so a turn has tools). */
@@ -37,6 +37,8 @@ export interface DebugHandles {
   reject: (callIds?: string[]) => Promise<unknown>;
   /** Summarize the active conversation (id, pending call, transcript items). */
   state: () => Promise<unknown>;
+  /** Normalized persisted tool calls/results for debugging model/tool behavior. */
+  toolusage: (params?: { conversationId?: number | null; stateLimit?: number; eventLimit?: number }) => Promise<unknown>;
 }
 
 // Computed-style props that matter for layout debugging — the form-collapse
@@ -194,6 +196,12 @@ function hostPress(key: string, selector?: string) {
   target.dispatchEvent(new KeyboardEvent("keydown", opts));
   target.dispatchEvent(new KeyboardEvent("keyup", opts));
   return { ok: true, key, on: target.tagName.toLowerCase() };
+}
+
+function numberParam(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 async function snapshot() {
@@ -395,6 +403,13 @@ export function useDebugBridge(handles: DebugHandles) {
           switch (action) {
             case "events":
               result = await getEvents(Number(params?.since) || 0, Number(params?.limit) || 500);
+              break;
+            case "toolusage":
+              result = await ref.current.toolusage({
+                conversationId: numberParam(params?.conversationId) ?? null,
+                stateLimit: numberParam(params?.stateLimit),
+                eventLimit: numberParam(params?.eventLimit),
+              });
               break;
             case "connect":
               result = await ref.current.connect(String(params?.url ?? ""));

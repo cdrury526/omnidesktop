@@ -27,6 +27,7 @@
 //!   GET  /dom?selector=CSS            -> computed box + styles of host elements
 //!   GET  /formdom                     -> the form iframe's self-reported layout
 //!   GET  /events?since=&limit=        -> the source-attributed activity timeline
+//!   GET  /toolusage?conversationId=   -> normalized persisted tool call report
 //!   GET  /snapshot                    -> html2canvas PNG of the host UI -> snapshots/
 //!
 //! Note: the MCP App form renders in a CROSS-ORIGIN sandbox iframe, so neither
@@ -333,6 +334,20 @@ fn handle_request(mut request: tiny_http::Request, app: &tauri::AppHandle) {
             let since = query_param(&url, "since").unwrap_or_default();
             let limit = query_param(&url, "limit").unwrap_or_default();
             wait(app, "events", json!({ "since": since, "limit": limit }))
+        }
+        ("GET", "/toolusage") => {
+            let conversation_id = query_param(&url, "conversationId").unwrap_or_default();
+            let state_limit = query_param(&url, "stateLimit").unwrap_or_default();
+            let event_limit = query_param(&url, "eventLimit").unwrap_or_default();
+            wait(
+                app,
+                "toolusage",
+                json!({
+                    "conversationId": conversation_id,
+                    "stateLimit": state_limit,
+                    "eventLimit": event_limit,
+                }),
+            )
         }
         ("GET", "/snapshot") => wait(app, "snapshot", json!({})),
         _ => Err("not found".to_string()),

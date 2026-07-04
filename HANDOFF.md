@@ -509,6 +509,11 @@ All verified headlessly via the bridge unless noted.
   column (user / debug-bridge / queue / repair / system) + global error capture;
   `tool.call`/`tool.result` events tied to `conversation_state` by `callId`.
   Read the timeline via `/events`. This is the "what happened and who did it" log.
+- **Tool usage report** — normalized tool-call analytics now join SDK
+  `conversation_state` (`function_call` / `function_call_output`) with timeline
+  events and Code tool telemetry. Use debug bridge `/toolusage` to inspect tool
+  name, args, output, status, model, approval state, structured errors, and
+  Code primitive duration/truncation/timeout aggregates.
 
 ## Workspace shell — DONE through Phase 4 (split polish)
 
