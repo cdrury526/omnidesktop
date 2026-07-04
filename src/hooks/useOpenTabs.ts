@@ -103,6 +103,7 @@ export function useOpenTabs(conversations: ConversationRow[]) {
     const tab: OpenTab = { id, initialConversationId: null };
     setTabs((prev) => [...prev, tab]);
     setActiveKey(String(id));
+    return id;
   }, [setActiveKey]);
 
   const newChatInProject = useCallback(
@@ -111,6 +112,7 @@ export function useOpenTabs(conversations: ConversationRow[]) {
       const tab: OpenTab = { id, initialConversationId: null, initialWorkingDir: dir };
       setTabs((prev) => [...prev, tab]);
       setActiveKey(String(id));
+      return id;
     },
     [setActiveKey],
   );

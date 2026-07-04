@@ -8,6 +8,9 @@
 //!   GET  /health                      -> liveness
 //!   POST /connect  {url}              -> connect to an MCP server
 //!   POST /newchat                      -> start a fresh conversation
+//!   POST /projectchat {workingDir,model?} -> start a Code-mode project chat
+//!   POST /setmodel {model}             -> switch the active model
+//!   POST /codemode {enabled,workingDir?} -> set Code mode on focused chat
 //!   POST /openform {spec}             -> deterministically open a form (forced tool call)
 //!   POST /send     {text}             -> run a chat turn with `text`
 //!   POST /submit   {values}           -> resolve the pending HITL form
@@ -312,6 +315,9 @@ fn handle_request(mut request: tiny_http::Request, app: &tauri::AppHandle) {
     let outcome = match (method.as_str(), route.as_str()) {
         ("POST", "/connect") => wait(app, "connect", read_body(&mut request)),
         ("POST", "/newchat") => wait(app, "newchat", json!({})),
+        ("POST", "/projectchat") => wait(app, "projectchat", read_body(&mut request)),
+        ("POST", "/setmodel") => wait(app, "setmodel", read_body(&mut request)),
+        ("POST", "/codemode") => wait(app, "codemode", read_body(&mut request)),
         ("POST", "/openform") => wait(app, "openform", read_body(&mut request)),
         ("POST", "/send") => wait(app, "send", read_body(&mut request)),
         ("POST", "/submit") => wait(app, "submit", read_body(&mut request)),

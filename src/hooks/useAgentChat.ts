@@ -684,12 +684,15 @@ export function useAgentChat({
       approvalPending,
       queued,
       connected: !!server,
+      codeMode,
+      workingDir,
+      folderMissing,
       formDirty: formDirtyRef.current,
       pending: pendingHitlCall(st),
       pendingApproval: pendingApprovalCalls(st),
       items: displayItemsFromState(st),
     };
-  }, [conversationId, busy, formPending, approvalPending, queued, server]);
+  }, [conversationId, busy, formPending, approvalPending, queued, server, codeMode, workingDir, folderMissing]);
 
   return {
     messages,

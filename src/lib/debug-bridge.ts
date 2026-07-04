@@ -23,6 +23,12 @@ export interface DebugHandles {
   connect: (url: string) => Promise<unknown>;
   /** Start a fresh conversation (test isolation). */
   newchat: () => Promise<unknown>;
+  /** Start a fresh Code-mode chat bound to `workingDir`; optionally switch model. */
+  projectchat: (params: { workingDir: string; model?: string }) => Promise<unknown>;
+  /** Switch the shared model picker value. */
+  setmodel: (model: string) => Promise<unknown>;
+  /** Change Code mode on the focused session. */
+  codemode: (params: { enabled?: boolean; workingDir?: string | null }) => Promise<unknown>;
   /** Deterministically open a form with the given DSL spec (forced tool call). */
   openform: (spec: unknown) => Promise<unknown>;
   /** Run a chat turn with `text`; resolve when it completes or pauses. */
@@ -416,6 +422,25 @@ export function useDebugBridge(handles: DebugHandles) {
               break;
             case "newchat":
               result = await ref.current.newchat();
+              break;
+            case "projectchat":
+              result = await ref.current.projectchat({
+                workingDir: String(params?.workingDir ?? ""),
+                model: params?.model == null ? undefined : String(params.model),
+              });
+              break;
+            case "setmodel":
+              result = await ref.current.setmodel(String(params?.model ?? ""));
+              break;
+            case "codemode":
+              result = await ref.current.codemode({
+                enabled: typeof params?.enabled === "boolean" ? params.enabled : undefined,
+                workingDir: params?.workingDir === undefined
+                  ? undefined
+                  : params.workingDir === null
+                    ? null
+                    : String(params.workingDir),
+              });
               break;
             case "openform":
               result = await ref.current.openform(params?.spec);

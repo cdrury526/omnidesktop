@@ -217,9 +217,21 @@ export default function App() {
       return { name: info.name, tools: [...info.tools.keys()] };
     },
     newchat: async () => {
-      await newBlankTab();
-      return { ok: true };
+      const tabId = await newBlankTab();
+      return { ok: true, tabId };
     },
+    projectchat: async ({ workingDir, model: nextModel }) => {
+      if (!workingDir) return { error: "workingDir is required" };
+      if (nextModel) onModelChange(nextModel);
+      const tabId = await newChatInProject(workingDir);
+      return { ok: true, tabId, workingDir, model: nextModel ?? model };
+    },
+    setmodel: async (nextModel) => {
+      if (!nextModel) return { error: "model is required" };
+      onModelChange(nextModel);
+      return { ok: true, model: nextModel };
+    },
+    codemode: async (params) => (await activeHandlers()?.codemode(params)) ?? { error: "no active session" },
     openform: async (spec) => (await activeHandlers()?.openform(spec)) ?? { error: "no active session" },
     send: async (text) => (await activeHandlers()?.send(text)) ?? { error: "no active session" },
     submit: async (values) => (await activeHandlers()?.submit(values)) ?? { error: "no active session" },

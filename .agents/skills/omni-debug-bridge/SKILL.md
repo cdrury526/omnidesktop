@@ -80,12 +80,28 @@ curl -sS -X POST http://127.0.0.1:1456/send -H 'content-type: application/json' 
 # active conversation: id, pending HITL call (incl. the form spec), transcript items
 curl -sS http://127.0.0.1:1456/state
 
+# switch the shared model picker value
+curl -sS -X POST http://127.0.0.1:1456/setmodel -H 'content-type: application/json' \
+  -d '{"model":"deepseek/deepseek-v4-flash"}'
+
+# start a fresh Code-mode chat bound to a project folder; optional model switch
+curl -sS -X POST http://127.0.0.1:1456/projectchat -H 'content-type: application/json' \
+  -d '{"workingDir":"/home/drury/projects/Auto-Realtor","model":"deepseek/deepseek-v4-flash"}'
+
+# update Code mode on the focused session
+curl -sS -X POST http://127.0.0.1:1456/codemode -H 'content-type: application/json' \
+  -d '{"enabled":true,"workingDir":"/home/drury/projects/Auto-Realtor"}'
+
 # resolve the pending interactive form headlessly (skip clicking the panel)
 curl -sS -X POST http://127.0.0.1:1456/submit -H 'content-type: application/json' \
   -d '{"values":{"email":"a@b.com","color":"green"}}'
 
 # cancel the pending interactive form (agent unblocks, card -> cancelled)
 curl -sS -X POST http://127.0.0.1:1456/cancel
+
+# approve/reject pending SDK Code-tool approvals
+curl -sS -X POST http://127.0.0.1:1456/approve -H 'content-type: application/json' -d '{}'
+curl -sS -X POST http://127.0.0.1:1456/reject -H 'content-type: application/json' -d '{}'
 
 # start a fresh conversation (test isolation — do this before a scenario)
 curl -sS -X POST http://127.0.0.1:1456/newchat

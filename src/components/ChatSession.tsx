@@ -132,6 +132,7 @@ export interface BridgeHandlers {
   cancel: () => Promise<unknown>;
   approve: (callIds?: string[]) => Promise<unknown>;
   reject: (callIds?: string[]) => Promise<unknown>;
+  codemode: (params: { enabled?: boolean; workingDir?: string | null }) => Promise<unknown>;
   state: () => Promise<unknown>;
 }
 
@@ -218,6 +219,15 @@ export function ChatSession({
       cancel: () => chatRef.current.cancelBridge(),
       approve: (callIds) => chatRef.current.approveBridge(callIds),
       reject: (callIds) => chatRef.current.rejectBridge(callIds),
+      codemode: async ({ enabled, workingDir }) => {
+        if (workingDir !== undefined) chatRef.current.setWorkingDir(workingDir);
+        if (enabled !== undefined) chatRef.current.setCodeMode(enabled);
+        return {
+          ok: true,
+          codeMode: enabled ?? chatRef.current.codeMode,
+          workingDir: workingDir !== undefined ? workingDir : chatRef.current.workingDir,
+        };
+      },
       state: () => chatRef.current.bridgeState(),
     };
     registerBridge(tabKey, handlers);

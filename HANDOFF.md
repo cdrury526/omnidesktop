@@ -497,7 +497,9 @@ All verified headlessly via the bridge unless noted.
 - **Debug bridge** (`debug.rs` + `debug-bridge.ts`, dev-only) — drive/inspect the
   app over HTTP, incl. **headless user-input simulation** (host `/type`/`/press`/
   `/click`; in-iframe `/forminput`/`/formclick` via a form↔bridge channel) and
-  `/openform` (deterministic forms). The **`omni-debug-bridge` skill** documents it.
+  `/openform` (deterministic forms). It also has Code-mode scenario controls:
+  `/projectchat`, `/setmodel`, `/codemode`, `/approve`, `/reject`. The
+  **`omni-debug-bridge` skill** documents it.
 - **Message queuing** — typing while busy or a form is open queues (rendered as
   "queued"), flushes when the agent is free; fixes the chat-while-form-open bug.
 - **Tool-call reliability guardrails** (engineering around intermittent
