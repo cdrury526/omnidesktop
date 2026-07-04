@@ -380,6 +380,24 @@ html, body, #root {
   color: var(--muted);
 }
 
+/* ---- tools panel ---- */
+.tool-registry-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.tool-registry-list .ant-list-item {
+  align-items: flex-start;
+  padding: 10px 0;
+}
+.tool-registry-name {
+  font-size: 0.75rem;
+}
+.tool-registry-description {
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 /* ---- header actions ---- */
 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 

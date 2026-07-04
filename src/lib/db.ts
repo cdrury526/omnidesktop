@@ -44,6 +44,70 @@ export async function setSetting(key: string, value: string): Promise<void> {
   );
 }
 
+// ---- tool registry / policy ----
+
+export type ToolSource = "builtin:code" | "mcp";
+
+export interface ToolRegistryRow {
+  id: number;
+  source: ToolSource;
+  source_id: string;
+  name: string;
+  title: string | null;
+  description: string | null;
+  enabled: number;
+  updated_at: string;
+}
+
+export interface ToolRegistryInput {
+  source: ToolSource;
+  sourceId?: string | null;
+  name: string;
+  title?: string | null;
+  description?: string | null;
+}
+
+export function toolPolicyKey(source: ToolSource, sourceId: string | null | undefined, name: string): string {
+  return `${source}:${sourceId ?? ""}:${name}`;
+}
+
+export function toolEnabledMap(rows: ToolRegistryRow[]): Map<string, boolean> {
+  return new Map(rows.map((r) => [toolPolicyKey(r.source, r.source_id || null, r.name), !!r.enabled]));
+}
+
+export async function listToolRegistry(): Promise<ToolRegistryRow[]> {
+  return dbSelect<ToolRegistryRow>(
+    "SELECT id, source, source_id, name, title, description, enabled, updated_at " +
+      "FROM tool_registry ORDER BY source, source_id, name",
+  );
+}
+
+export async function upsertToolRegistry(tools: ToolRegistryInput[]): Promise<void> {
+  for (const t of tools) {
+    await dbExecute(
+      "INSERT INTO tool_registry(source, source_id, name, title, description) VALUES(?, ?, ?, ?, ?) " +
+        "ON CONFLICT(source, source_id, name) DO UPDATE SET " +
+        "title = COALESCE(excluded.title, tool_registry.title), " +
+        "description = COALESCE(excluded.description, tool_registry.description), " +
+        "updated_at = datetime('now')",
+      [t.source, t.sourceId ?? "", t.name, t.title ?? null, t.description ?? null],
+    );
+  }
+}
+
+export async function setToolEnabled(
+  source: ToolSource,
+  sourceId: string | null | undefined,
+  name: string,
+  enabled: boolean,
+): Promise<void> {
+  await dbExecute(
+    "UPDATE tool_registry SET enabled = ?, updated_at = datetime('now') " +
+      "WHERE source = ? AND source_id = ? AND name = ?",
+    [enabled ? 1 : 0, source, sourceId ?? "", name],
+  );
+}
+
 // ---- MCP server registry ----
 
 export interface McpServerRow {

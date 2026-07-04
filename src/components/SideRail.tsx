@@ -1,8 +1,8 @@
 /**
  * The left icon rail — the app's primary navigation. Collapsed to icons by
  * default; clicking an icon opens that section's panel beside the rail (clicking
- * the active icon again closes it). History/Projects/Settings are live;
- * Tools/Agents/Commands are placeholders for future work (disabled, tooltipped).
+ * the active icon again closes it). History/Projects/Tools/Settings are live;
+ * Agents/Commands are placeholders for future work (disabled, tooltipped).
  *
  * The rail is app chrome (it spans all sessions); the panels it opens are
  * rendered by App next to it.
@@ -37,7 +37,7 @@ interface RailItem {
 const TOP_ITEMS: RailItem[] = [
   { key: "history", label: "History", icon: <HistoryOutlined /> },
   { key: "projects", label: "Projects", icon: <FolderOutlined /> },
-  { key: "tools", label: "Tools", icon: <ToolOutlined />, soon: true },
+  { key: "tools", label: "Tools", icon: <ToolOutlined /> },
   { key: "agents", label: "Agents", icon: <RobotOutlined />, soon: true },
   { key: "commands", label: "Commands", icon: <CodeOutlined />, soon: true },
 ];

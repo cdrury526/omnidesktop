@@ -44,6 +44,7 @@ export const log = {
 
 export interface ServerInfo {
   name: string;
+  url: string;
   client: Client;
   tools: Map<string, Tool>;
   resources: Map<string, Resource>;
@@ -65,7 +66,7 @@ export async function connectToServer(serverUrl: URL): Promise<ServerInfo> {
   const resources = new Map(resourcesList.resources.map((r) => [r.uri, r]));
   log.info("Server resources:", Array.from(resources.keys()));
 
-  return { name, client, tools, resources, appHtmlCache: new Map() };
+  return { name, url: serverUrl.href, client, tools, resources, appHtmlCache: new Map() };
 }
 
 async function connectWithFallback(serverUrl: URL): Promise<Client> {

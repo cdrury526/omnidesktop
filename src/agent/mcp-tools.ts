@@ -26,8 +26,9 @@ function isInteractive(meta: unknown): boolean {
 export function buildMcpTools(
   server: ServerInfo,
   onAutoSummon: (info: ToolCallInfo) => void,
+  isEnabled: (name: string) => boolean = () => true,
 ) {
-  return Array.from(server.tools.values()).map((t) => {
+  return Array.from(server.tools.values()).filter((t) => isEnabled(t.name)).map((t) => {
     const inputSchema = objectToZod(t.inputSchema as never);
     const description = t.description ?? t.title ?? t.name;
 

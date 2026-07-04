@@ -52,10 +52,14 @@ anything outside the working folder is rejected. `read_file` is UTF-8 text only
 and bounded to 200 KiB. Unit tests cover normal in-root resolution and `..`
 escape rejection.
 
-No DB tool registry was added. Built-in Code tools are derived from app code and
-the active Code mode state; MCP tools are still runtime-discovered from connected
-servers. A DB registry only makes sense later for user-visible enable/disable,
-per-project policy overrides, or persisted tool configuration.
+## ✅ DONE — Tool registry / enable-disable policy
+
+Migration `0007_tool_registry.sql` adds a persisted registry for built-in Code
+tools and discovered MCP tools. The Tools rail panel lets users disable tools
+they do not need; disabled tools are filtered before the SDK `callModel` tool
+list is built, so they do not consume tool context/tokens. Built-in Code tools
+use source `builtin:code`; MCP tools are keyed by source `mcp` plus server URL.
+Missing policy rows default to enabled so discovery is non-breaking.
 
 ## ✅ DONE — Inline MCP Apps in the transcript (commit `5e055728`)
 
@@ -411,10 +415,10 @@ The chat→coding workspace is being built in phases (Stitch renders in
   per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
   reduce time-to-first-token with a snappier model. Not a bug.
 - **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md`: scoped
-  Rust `list_dir` / `read_file` are done. Next: `write_file` / `run_command`
-  using the permission-mode architecture in `CODE_TOOLS_SDK_NOTES.md`: SDK
-  `requireApproval` by default, optional yolo mode that skips approval only,
-  never Rust scoping/logging.
+  Rust `list_dir` / `read_file` and the tool registry are done. Next:
+  `write_file` / `run_command` using the permission-mode architecture in
+  `CODE_TOOLS_SDK_NOTES.md`: SDK `requireApproval` by default, optional yolo
+  mode that skips approval only, never Rust scoping/logging.
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference
   the earlier result) — built + headless-verified, not yet eyeballed live.
 - Productize workspace basics: conversation rename, retry/regenerate, MCP server

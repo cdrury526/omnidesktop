@@ -4,6 +4,7 @@ export interface UseAgentChatArgs {
   apiKey: string;
   model: string;
   server: ServerInfo | null;
+  toolPolicies: Map<string, boolean>;
   conversationId: number | null;
   setConversationId: (id: number | null) => void;
   /** Refresh the conversation list (recency) after a turn touches a chat. */
@@ -11,4 +12,3 @@ export interface UseAgentChatArgs {
   /** Surface a "need key/model" message in App's connection error banner. */
   setConnError: (msg: string | null) => void;
 }
-

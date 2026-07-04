@@ -125,6 +125,7 @@ interface Props {
   model: string;
   onModelChange: (id: string) => void;
   server: ServerInfo | null;
+  toolPolicies: Map<string, boolean>;
   onConversationsChanged: () => void;
   initialConversationId: number | null;
   initialWorkingDir?: string | null;
@@ -142,6 +143,7 @@ export function ChatSession({
   model,
   onModelChange,
   server,
+  toolPolicies,
   onConversationsChanged,
   initialConversationId,
   initialWorkingDir,
@@ -155,6 +157,7 @@ export function ChatSession({
     apiKey,
     model,
     server,
+    toolPolicies,
     conversationId,
     setConversationId,
     onConversationsChanged,

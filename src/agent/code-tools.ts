@@ -9,10 +9,24 @@ export interface CodeToolPermissions {
 export interface BuildCodeToolsArgs {
   workingDir: string;
   permissions?: CodeToolPermissions;
+  isEnabled?: (name: string) => boolean;
 }
 
-export function buildCodeTools({ workingDir }: BuildCodeToolsArgs): Tool[] {
-  return [
+export const CODE_TOOL_DEFINITIONS = [
+  {
+    name: "list_dir",
+    title: "List directory",
+    description: "List files and directories inside the current Code mode working folder.",
+  },
+  {
+    name: "read_file",
+    title: "Read file",
+    description: "Read a UTF-8 text file inside the current Code mode working folder.",
+  },
+];
+
+export function buildCodeTools({ workingDir, isEnabled = () => true }: BuildCodeToolsArgs): Tool[] {
+  const tools = [
     tool({
       name: "list_dir",
       description:
@@ -48,5 +62,5 @@ export function buildCodeTools({ workingDir }: BuildCodeToolsArgs): Tool[] {
       execute: ({ path }) => fsReadFile(workingDir, path),
     }),
   ];
+  return tools.filter((t) => isEnabled(t.function.name));
 }
-

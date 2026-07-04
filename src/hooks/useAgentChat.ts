@@ -56,6 +56,7 @@ export function useAgentChat({
   apiKey,
   model,
   server,
+  toolPolicies,
   conversationId,
   setConversationId,
   onConversationsChanged,
@@ -69,8 +70,7 @@ export function useAgentChat({
   const [queued, setQueued] = useState<string[]>([]);
   const [formPending, setFormPending] = useState(false);
   const [activation, setActivation] = useState<ToolCallInfo | null>(null);
-  // Code mode: bound per-conversation, injected into the agent's prompt. Held
-  // here (alongside the turn loop that consumes it) and mirrored to the DB. A
+  // Code mode: per-conversation prompt context, mirrored to the DB. A
   // ref keeps the latest values readable from stable turn callbacks.
   const [codeMode, setCodeModeState] = useState(false);
   const [workingDir, setWorkingDirState] = useState<string | null>(null);
@@ -342,14 +342,14 @@ export function useAgentChat({
 
       const state = conversationStateAccessor(convId);
       const workingDir = activeWorkingDir();
-      const tools = buildAgentTools(server, workingDir, summonPanel);
+      const tools = buildAgentTools(server, workingDir, summonPanel, toolPolicies);
       const telemetry = emptyTelemetry();
       try {
         await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir, telemetry });
         let st = await getConversationState(convId);
         // Self-repair: if the model described a form but didn't call the tool,
         // re-prompt once with the tool forced (only when the forms tool exists).
-        if (!controller.signal.aborted && server?.tools.has("request_user_input") && !pendingHitlCall(st) && describedButDidntCall(st)) {
+        if (!controller.signal.aborted && server?.tools.has("request_user_input") && toolPolicies.get(`mcp:${server.url}:request_user_input`) !== false && !pendingHitlCall(st) && describedButDidntCall(st)) {
           logEvent({ source: "repair", type: "repair.fired", conversationId: convId });
           await repairToolCall({ apiKey, model, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir, telemetry });
           st = await getConversationState(convId);
@@ -378,7 +378,7 @@ export function useAgentChat({
       }
       return convId;
     },
-    [busy, apiKey, model, conversationId, server, setConnError, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged, activeWorkingDir],
+    [busy, apiKey, model, conversationId, server, toolPolicies, setConnError, setConversationId, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged, activeWorkingDir],
   );
 
   /** Send (or queue) a message. `raw` comes from Sender's onSubmit. */
@@ -439,7 +439,7 @@ export function useAgentChat({
       setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
 
       const accessor = conversationStateAccessor(convId);
-      const tools = buildAgentTools(server, activeWorkingDir(), summonPanel);
+      const tools = buildAgentTools(server, activeWorkingDir(), summonPanel, toolPolicies);
       const telemetry = emptyTelemetry();
       try {
         await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir: activeWorkingDir(), telemetry });
@@ -458,7 +458,7 @@ export function useAgentChat({
       }
       return convId;
     },
-    [conversationId, busy, server, apiKey, model, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged],
+    [conversationId, busy, server, toolPolicies, apiKey, model, summonPanel, appendDeltaToLastAssistant, applyState, emitToolEvents, setAssistantError, handleTurnError, onConversationsChanged],
   );
 
   /** Validate the submitted values host-side (untrusted iframe) and resume. */

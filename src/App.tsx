@@ -5,13 +5,27 @@ import { SideRail, type RailSection } from "./components/SideRail";
 import { HistoryPanel } from "./components/panels/HistoryPanel";
 import { ProjectsPanel } from "./components/panels/ProjectsPanel";
 import { SettingsPanel } from "./components/panels/SettingsPanel";
+import { ToolsPanel } from "./components/panels/ToolsPanel";
 import { TabBar } from "./components/TabBar";
 import { ChatSession, type BridgeHandlers } from "./components/ChatSession";
 import { useOpenTabs } from "./hooks/useOpenTabs";
 import { useSplitView } from "./hooks/useSplitView";
 import { useMcpConnection } from "./hooks/useMcpConnection";
 import { getApiKey, saveApiKey, deleteApiKey } from "./lib/secrets";
-import { getSetting, setSetting, listConversations, deleteConversation, type ConversationRow } from "./lib/db";
+import {
+  getSetting,
+  setSetting,
+  listConversations,
+  deleteConversation,
+  listToolRegistry,
+  setToolEnabled,
+  toolEnabledMap,
+  upsertToolRegistry,
+  type ConversationRow,
+  type ToolRegistryInput,
+  type ToolRegistryRow,
+} from "./lib/db";
+import { CODE_TOOL_DEFINITIONS } from "./agent/code-tools";
 import { Button, Flex, Splitter, Typography } from "antd";
 import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import "./App.css";
@@ -76,15 +90,24 @@ export default function App() {
   }, [apiKey]);
 
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [toolRegistry, setToolRegistry] = useState<ToolRegistryRow[]>([]);
   const [railSection, setRailSection] = useState<RailSection | null>(null);
 
   const refreshConversations = useCallback(async () => {
     setConversations(await listConversations());
   }, []);
 
+  const refreshToolRegistry = useCallback(async () => {
+    setToolRegistry(await listToolRegistry());
+  }, []);
+
   useEffect(() => {
     void refreshConversations();
   }, [refreshConversations]);
+
+  useEffect(() => {
+    void refreshToolRegistry();
+  }, [refreshToolRegistry]);
 
   const {
     tabs,
@@ -104,6 +127,47 @@ export default function App() {
   const tabKeys = useMemo(() => tabs.map((t) => String(t.id)), [tabs]);
 
   const split = useSplitView({ activeKey, setActiveKey, tabKeys });
+
+  const toolPolicies = useMemo(() => toolEnabledMap(toolRegistry), [toolRegistry]);
+
+  const syncKnownTools = useCallback(
+    async (info = server) => {
+      const inputs: ToolRegistryInput[] = CODE_TOOL_DEFINITIONS.map((t) => ({
+        source: "builtin:code",
+        name: t.name,
+        title: t.title,
+        description: t.description,
+      }));
+      if (info) {
+        inputs.push(
+          ...[...info.tools.values()].map((t) => ({
+            source: "mcp" as const,
+            sourceId: info.url,
+            name: t.name,
+            title: t.title ?? t.name,
+            description: t.description ?? null,
+          })),
+        );
+      }
+      await upsertToolRegistry(inputs);
+      await refreshToolRegistry();
+    },
+    [server, refreshToolRegistry],
+  );
+
+  useEffect(() => {
+    void syncKnownTools();
+  }, [syncKnownTools]);
+
+  const toggleTool = useCallback(
+    async (tool: ToolRegistryRow, enabled: boolean) => {
+      await setToolEnabled(tool.source, tool.source_id, tool.name, enabled);
+      setToolRegistry((rows) =>
+        rows.map((r) => (r.id === tool.id ? { ...r, enabled: enabled ? 1 : 0 } : r)),
+      );
+    },
+    [],
+  );
 
   const focusKeyRef = useRef(split.focusKey);
   useEffect(() => {
@@ -196,6 +260,7 @@ export default function App() {
         model={model}
         onModelChange={onModelChange}
         server={server}
+        toolPolicies={toolPolicies}
         onConversationsChanged={refreshConversations}
         initialConversationId={t.initialConversationId}
         initialWorkingDir={t.initialWorkingDir}
@@ -255,6 +320,9 @@ export default function App() {
               onDelete={removeConversation}
               onNewInProject={(dir) => void newChatInProject(dir)}
             />
+          )}
+          {railSection === "tools" && (
+            <ToolsPanel tools={toolRegistry} onToggle={(tool, enabled) => void toggleTool(tool, enabled)} />
           )}
           {railSection === "settings" && (
             <SettingsPanel

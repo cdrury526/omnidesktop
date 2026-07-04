@@ -56,6 +56,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "doc_symbols",
         sql: include_str!("schema/0006_doc_symbols.sql"),
     },
+    Migration {
+        version: 7,
+        name: "tool_registry",
+        sql: include_str!("schema/0007_tool_registry.sql"),
+    },
 ];
 
 /// Apply every pending migration in order. Returns a contextual error naming the
