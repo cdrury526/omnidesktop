@@ -30,9 +30,11 @@ function instructionsFor(workingDir?: string): string {
     `session is \`${workingDir}\`. Treat it as the project root: when the user ` +
     'says "the project", "this repo", or names files without an absolute path, ' +
     "resolve them relative to that folder. You can list directories and read " +
-    "UTF-8 text files through the available Code mode tools. You cannot write " +
-    "files or run commands yet, so do not claim to have modified files or " +
-    "executed commands."
+    "UTF-8 text files through the available Code mode tools. You can also write " +
+    "UTF-8 text files and run commands with the command working directory locked " +
+    "to the project root. Write and command tools may require user approval " +
+    "before execution; if approval is pending, wait for the approval result " +
+    "instead of claiming the action completed."
   );
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { tool } from "@openrouter/agent";
 import { z } from "zod";
+import { buildCodeTools, CODE_TOOL_DEFINITIONS } from "./code-tools";
 import { assertUniqueToolNames, dedupeToolNames, toolFunctionName } from "./tool-names";
 import { isToolEnabled, toolPolicyKey } from "./tool-policy";
 
@@ -42,5 +43,33 @@ describe("tool-names", () => {
     const mk = (name: string) =>
       tool({ name, inputSchema: z.object({}), execute: async () => ({}) });
     assert.throws(() => assertUniqueToolNames([mk("x"), mk("x")]), /Duplicate tool name/);
+  });
+});
+
+describe("code-tools", () => {
+  const requireApprovalOf = (t: unknown): unknown =>
+    (t as { function?: { requireApproval?: unknown } }).function?.requireApproval;
+
+  it("registers read, write, and command built-ins for registry sync", () => {
+    assert.deepEqual(
+      CODE_TOOL_DEFINITIONS.map((t) => t.name),
+      ["list_dir", "read_file", "write_file", "run_command"],
+    );
+  });
+
+  it("gates write and command tools with SDK approval in ask mode", () => {
+    const tools = buildCodeTools({ workingDir: "/tmp/project", permissions: { mode: "ask" } });
+    const byName = new Map(tools.map((t) => [toolFunctionName(t), t]));
+    assert.equal(requireApprovalOf(byName.get("list_dir")), undefined);
+    assert.equal(requireApprovalOf(byName.get("read_file")), undefined);
+    assert.equal(requireApprovalOf(byName.get("write_file")), true);
+    assert.equal(requireApprovalOf(byName.get("run_command")), true);
+  });
+
+  it("skips write and command SDK approval in yolo mode", () => {
+    const tools = buildCodeTools({ workingDir: "/tmp/project", permissions: { mode: "yolo" } });
+    const byName = new Map(tools.map((t) => [toolFunctionName(t), t]));
+    assert.equal(requireApprovalOf(byName.get("write_file")), undefined);
+    assert.equal(requireApprovalOf(byName.get("run_command")), undefined);
   });
 });

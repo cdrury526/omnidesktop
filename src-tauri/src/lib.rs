@@ -93,6 +93,8 @@ pub fn run() {
             fs::path_is_dir,
             fs::fs_list_dir,
             fs::fs_read_file,
+            fs::fs_write_file,
+            fs::run_command,
             debug::complete_debug_request,
             debug::save_snapshot
         ])
