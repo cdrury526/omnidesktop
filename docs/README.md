@@ -42,8 +42,10 @@ pnpm docs:ingest
 pnpm docs:search -- stopWhen
 pnpm docs:search --mirror openrouter-agent-sdk --layer published call-model
 pnpm docs:search --paths ag-ui events
+pnpm docs:search --paths-only stopWhen
 pnpm docs:search --json stopWhen
 pnpm docs:search --chunks --mirror ag-ui-protocol events
+pnpm docs:find --mirror openrouter-agent-sdk stopWhen
 
 # Browse taxonomy
 pnpm docs:list

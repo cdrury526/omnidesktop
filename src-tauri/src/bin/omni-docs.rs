@@ -44,7 +44,7 @@ enum Command {
         #[arg(long, default_value_t = 12)]
         limit: u32,
         /// Print only paths (for scripting)
-        #[arg(long)]
+        #[arg(long, visible_alias = "paths-only")]
         paths: bool,
         /// Emit JSON array of hits
         #[arg(long)]
@@ -52,6 +52,18 @@ enum Command {
         /// Search heading-level chunks instead of full pages
         #[arg(long)]
         chunks: bool,
+    },
+    /// Full-text search that prints only mirror-relative paths
+    Find {
+        query: String,
+        #[arg(long)]
+        mirror: Option<String>,
+        #[arg(long)]
+        layer: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long, default_value_t = 12)]
+        limit: u32,
     },
     /// Print chunk content by chunk row id
     OpenChunk { id: i64 },
@@ -164,7 +176,7 @@ async fn main() -> Result<(), String> {
                 }
                 for h in hits {
                     if paths {
-                        println!("{}:{}", h.mirror, h.rel_path);
+                        print_doc_path(&h.mirror, &h.rel_path);
                     } else {
                         let title = h.title.as_deref().unwrap_or(&h.slug);
                         let location = if h.category.is_empty() {
@@ -208,7 +220,7 @@ async fn main() -> Result<(), String> {
             }
             for h in hits {
                 if paths {
-                    println!("{}:{}", h.mirror, h.rel_path);
+                    print_doc_path(&h.mirror, &h.rel_path);
                 } else {
                     let title = h.title.as_deref().unwrap_or(&h.slug);
                     let location = if h.category.is_empty() {
@@ -221,6 +233,26 @@ async fn main() -> Result<(), String> {
                         h.id, title, location, h.byte_size, h.excerpt, h.mirror, h.rel_path
                     );
                 }
+            }
+        }
+        Command::Find {
+            query,
+            mirror,
+            layer,
+            category,
+            limit,
+        } => {
+            let hits = search(
+                &database,
+                &query,
+                mirror.as_deref(),
+                layer.as_deref(),
+                category.as_deref(),
+                limit,
+            )
+            .await?;
+            for h in hits {
+                print_doc_path(&h.mirror, &h.rel_path);
             }
         }
         Command::OpenChunk { id } => {
@@ -408,6 +440,10 @@ fn print_json<T: serde::Serialize>(value: &T) -> Result<(), String> {
     let json = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     println!("{json}");
     Ok(())
+}
+
+fn print_doc_path(mirror: &str, rel_path: &str) {
+    println!("{mirror}/{rel_path}");
 }
 
 fn compact_field(value: &str) -> String {

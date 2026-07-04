@@ -45,10 +45,10 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
   - Example: `symbol callModel`, `symbol createMCPTools`.
   - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:ingest`; `pnpm docs:symbol callModel | node -e ...`; `pnpm docs:symbol createMCPTools | node -e ...`; `pnpm docs:symbol --json callModel | node -e ...`.
 
-- [ ] **7. `find` alias / `--paths-only`**
+- [x] **7. `find` alias / `--paths-only`**
   - Thin output: `mirror/rel_path` per line for editor open / scripting.
   - `pnpm docs:find` wrapper.
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:find stopWhen | node -e ...`; `pnpm docs:find --mirror openrouter-agent-sdk stopWhen | node -e ...`; `pnpm docs:search --paths-only stopWhen | node -e ...`.
 
 - [ ] **8. `related <id>`**
   - Same `mirror` + `category` siblings (or shared tags later).
