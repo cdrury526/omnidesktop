@@ -49,6 +49,10 @@ pnpm docs:list
 pnpm docs:list --mirror ag-ui-protocol --layer official
 pnpm docs:list --json --mirror openrouter-agent-sdk --layer published
 
+# Compact catalog for agent context maps
+pnpm docs:index --compact
+pnpm docs:index --compact --mirror ag-ui-protocol
+
 # Full content by hit id
 pnpm docs:open -- 42
 pnpm docs:open --json 42

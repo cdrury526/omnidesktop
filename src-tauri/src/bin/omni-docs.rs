@@ -69,6 +69,14 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Print a catalog of indexed pages
+    Index {
+        /// Token-efficient one-line output: mirror | layer | category | slug | title
+        #[arg(long)]
+        compact: bool,
+        #[arg(long)]
+        mirror: Option<String>,
+    },
     /// Row counts per mirror/layer
     Stats,
 }
@@ -183,6 +191,22 @@ async fn main() -> Result<(), String> {
                 }
             }
         }
+        Command::Index { compact, mirror } => {
+            if !compact {
+                return Err("index currently supports only --compact".to_string());
+            }
+            let pages = list_pages(&database, mirror.as_deref(), None).await?;
+            for page in pages {
+                println!(
+                    "{} | {} | {} | {} | {}",
+                    compact_field(&page.mirror),
+                    compact_field(&page.layer),
+                    compact_field(&page.category),
+                    compact_field(&page.slug),
+                    compact_field(page.title.as_deref().unwrap_or(&page.slug)),
+                );
+            }
+        }
         Command::Stats => {
             let rows = stats(&database).await?;
             let mut total = 0i64;
@@ -237,4 +261,12 @@ fn print_json<T: serde::Serialize>(value: &T) -> Result<(), String> {
     let json = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     println!("{json}");
     Ok(())
+}
+
+fn compact_field(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('|', "/")
 }

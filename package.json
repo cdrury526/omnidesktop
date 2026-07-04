@@ -13,6 +13,7 @@
     "docs:ingest": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- ingest docs",
     "docs:search": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- search",
     "docs:list": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- list",
+    "docs:index": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- index",
     "docs:open": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- open"
   },
   "dependencies": {

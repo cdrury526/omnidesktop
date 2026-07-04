@@ -15,10 +15,10 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
   - Flags: `search --json`, `list --json`, `open --json` (metadata only; content in separate field or omitted for search).
   - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:ingest`; `pnpm docs:search --json stopWhen | node -e ...`; `pnpm docs:list --json --mirror openrouter-agent-sdk --layer published | node -e ...`; `pnpm docs:open --json 1 | node -e ...`.
 
-- [ ] **2. `index --compact`**
+- [x] **2. `index --compact`**
   - Token-efficient catalog: one line per page (`mirror | layer | category | slug | title`).
   - Optional `--mirror` filter; pipe-friendly for agent context maps.
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:index --compact | node -e ...`; `pnpm docs:index --compact --mirror ag-ui-protocol | node -e ...`.
 
 - [ ] **3. Heading-level chunks**
   - Ingest splits `##` / `###` sections into `doc_chunks` (+ FTS).
