@@ -19,14 +19,16 @@ import {
 } from "../mcp/host-bridge";
 import type { UseAgentChatArgs } from "./useAgentChatTypes";
 import {
-  buildMcpTools,
+  buildAgentTools,
   runTurn,
   resumeTurn,
+  resumeApprovalTurn,
   openForm,
   repairToolCall,
   describedButDidntCall,
   displayItemsFromState,
   pendingHitlCall,
+  pendingApprovalCalls,
   toolCardsFromState,
   toolResultDetail,
   emptyTelemetry,
@@ -34,7 +36,6 @@ import {
   LeakedToolCallError,
   type DisplayItem,
 } from "../agent/runner";
-import { buildAgentTools } from "./agentChatTools";
 import { isFormSubmit, isFormCancel, readFormDirty, validateResult, type FormSpec } from "@omni/forms-dsl";
 import { Modal } from "antd";
 import { logEvent, type EventSource } from "../lib/events";
@@ -69,6 +70,7 @@ export function useAgentChat({
   // sent (sending mid-form would abandon it). They flush when the agent is free.
   const [queued, setQueued] = useState<string[]>([]);
   const [formPending, setFormPending] = useState(false);
+  const [approvalPending, setApprovalPending] = useState(false);
   const [activation, setActivation] = useState<ToolCallInfo | null>(null);
   // Code mode: per-conversation prompt context, mirrored to the DB. A
   // ref keeps the latest values readable from stable turn callbacks.
@@ -133,6 +135,7 @@ export function useAgentChat({
   const applyState = useCallback((state: unknown) => {
     setMessages(displayItemsFromState(state));
     setFormPending(!!pendingHitlCall(state));
+    setApprovalPending(pendingApprovalCalls(state).length > 0);
   }, []);
 
   // Last-seen status per tool callId, so we emit tool.call once and tool.result
@@ -147,7 +150,7 @@ export function useAgentChat({
       if (prev === undefined) {
         logEvent({ source: "system", type: "tool.call", conversationId: convId, data: { callId: card.callId, name: card.name } });
       }
-      if (card.status !== "pending" && prev !== card.status) {
+      if (card.status !== "pending" && card.status !== "awaiting_approval" && prev !== card.status) {
         // Attach a truncated error/cancel detail so failures are diagnosable
         // from the event log alone (done results can be large — skip those).
         const detail = card.status === "done" ? undefined : toolResultDetail(card.result);
@@ -208,6 +211,7 @@ export function useAgentChat({
       seedToolSeen(state); // existing tool calls are "seen" — don't re-log history
       const pending = pendingHitlCall(state);
       setFormPending(!!pending);
+      setApprovalPending(pendingApprovalCalls(state).length > 0);
       const srv = serverRef.current;
       if (pending && srv?.tools.has(pending.name)) {
         const info = callTool(srv, pending.name, pending.args);
@@ -221,6 +225,7 @@ export function useAgentChat({
     const rows = await getMessages(id);
     setMessages(rows.map((r) => ({ kind: "msg", role: r.role as "user" | "assistant", content: r.content })));
     setFormPending(false);
+    setApprovalPending(false);
     setActivation(null);
   }, [summonPanel, seedToolSeen, syncFolderReachable]);
 
@@ -229,6 +234,7 @@ export function useAgentChat({
     setMessages([]);
     setQueued([]);
     setFormPending(false);
+    setApprovalPending(false);
     setActivation(null);
     setCodeModeState(false);
     setWorkingDirState(null);
@@ -248,6 +254,7 @@ export function useAgentChat({
     setMessages([]);
     setQueued([]);
     setFormPending(false);
+    setApprovalPending(false);
     setActivation(null);
     toolSeenRef.current.clear();
     formDirtyRef.current = false;
@@ -342,7 +349,7 @@ export function useAgentChat({
 
       const state = conversationStateAccessor(convId);
       const workingDir = activeWorkingDir();
-      const tools = buildAgentTools(server, workingDir, summonPanel, toolPolicies);
+      const tools = buildAgentTools({ server, workingDir, summonPanel, toolPolicies });
       const telemetry = emptyTelemetry();
       try {
         await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir, telemetry });
@@ -402,7 +409,7 @@ export function useAgentChat({
 
   // Flush the next queued message once the agent is free (not busy, no open form).
   useEffect(() => {
-    if (busy || formPending || queued.length === 0 || flushingRef.current) return;
+    if (busy || formPending || approvalPending || queued.length === 0 || flushingRef.current) return;
     flushingRef.current = true;
     const next = queued[0];
     setQueued((q) => q.slice(1));
@@ -410,7 +417,96 @@ export function useAgentChat({
     void runUserTurn(next, "queue").finally(() => {
       flushingRef.current = false;
     });
-  }, [busy, formPending, queued, conversationId, runUserTurn]);
+  }, [busy, formPending, approvalPending, queued, conversationId, runUserTurn]);
+
+  /** Resume SDK `awaiting_approval` with approve/reject decisions. */
+  const resolveApproval = useCallback(
+    async (decision: "approve" | "reject", callIds?: string[]): Promise<number | null> => {
+      const convId = conversationId;
+      if (convId == null || busy) return null;
+      const pending = pendingApprovalCalls(await getConversationState(convId));
+      if (!pending.length) return null;
+      const ids = callIds?.length ? callIds : pending.map((p) => p.callId);
+      const approveToolCalls = decision === "approve" ? ids : [];
+      const rejectToolCalls = decision === "reject" ? ids : [];
+
+      setApprovalPending(false);
+      setBusy(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
+
+      const accessor = conversationStateAccessor(convId);
+      const tools = buildAgentTools({ server, workingDir: activeWorkingDir(), summonPanel, toolPolicies });
+      const telemetry = emptyTelemetry();
+      logEvent({
+        source: "user",
+        type: decision === "approve" ? "tool.approve" : "tool.reject",
+        conversationId: convId,
+        data: { callIds: ids },
+      });
+      try {
+        await resumeApprovalTurn({
+          apiKey,
+          model,
+          approveToolCalls,
+          rejectToolCalls,
+          state: accessor,
+          tools,
+          onTextDelta: appendDeltaToLastAssistant,
+          signal: controller.signal,
+          workingDir: activeWorkingDir(),
+          telemetry,
+        });
+        const st = await getConversationState(convId);
+        applyState(st);
+        emitToolEvents(convId, st);
+        if (controller.signal.aborted) {
+          logEvent({ source: "user", type: "turn.cancelled", conversationId: convId, data: telemetryData(telemetry) });
+        } else {
+          logEvent({
+            source: "user",
+            type: "turn.end",
+            conversationId: convId,
+            data: { approval: decision, ...telemetryData(telemetry) },
+          });
+        }
+      } catch (e) {
+        if (!handleTurnError(e, "user", convId)) setAssistantError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+        abortRef.current = null;
+        await touchConversation(convId);
+        onConversationsChanged();
+      }
+      return convId;
+    },
+    [
+      conversationId,
+      busy,
+      server,
+      toolPolicies,
+      apiKey,
+      model,
+      summonPanel,
+      appendDeltaToLastAssistant,
+      applyState,
+      emitToolEvents,
+      setAssistantError,
+      handleTurnError,
+      onConversationsChanged,
+      activeWorkingDir,
+    ],
+  );
+
+  const approvePendingTools = useCallback(
+    (callIds?: string[]) => resolveApproval("approve", callIds),
+    [resolveApproval],
+  );
+  const rejectPendingTools = useCallback(
+    (callIds?: string[]) => resolveApproval("reject", callIds),
+    [resolveApproval],
+  );
 
   /** Feed an output back to the pending HITL call and resume. `build` derives the
    * output + the form_events log from the pending call. Shared by submit/cancel.
@@ -439,7 +535,7 @@ export function useAgentChat({
       setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
 
       const accessor = conversationStateAccessor(convId);
-      const tools = buildAgentTools(server, activeWorkingDir(), summonPanel, toolPolicies);
+      const tools = buildAgentTools({ server, workingDir: activeWorkingDir(), summonPanel, toolPolicies });
       const telemetry = emptyTelemetry();
       try {
         await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir: activeWorkingDir(), telemetry });
@@ -526,7 +622,7 @@ export function useAgentChat({
       setBusy(true);
       setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
       const accessor = conversationStateAccessor(convId);
-      const tools = buildMcpTools(server, summonPanel);
+      const tools = buildAgentTools({ server, workingDir: activeWorkingDir(), summonPanel, toolPolicies });
       try {
         await openForm({ apiKey, model, spec, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant });
         const st = await getConversationState(convId);
@@ -562,11 +658,38 @@ export function useAgentChat({
     return bridgeResolutionTranscript("cancelled", convId);
   }, [cancelPendingForm]);
 
+  const approveBridge = useCallback(
+    async (callIds?: string[]) => {
+      const convId = await approvePendingTools(callIds);
+      return bridgeResolutionTranscript("approved", convId);
+    },
+    [approvePendingTools],
+  );
+
+  const rejectBridge = useCallback(
+    async (callIds?: string[]) => {
+      const convId = await rejectPendingTools(callIds);
+      return bridgeResolutionTranscript("rejected", convId);
+    },
+    [rejectPendingTools],
+  );
+
   /** The chat-portion of the debug bridge's `/state` snapshot. */
   const bridgeState = useCallback(async () => {
     const st = conversationId != null ? await getConversationState(conversationId) : null;
-    return { conversationId, busy, formPending, queued, connected: !!server, formDirty: formDirtyRef.current, pending: pendingHitlCall(st), items: displayItemsFromState(st) };
-  }, [conversationId, busy, formPending, queued, server]);
+    return {
+      conversationId,
+      busy,
+      formPending,
+      approvalPending,
+      queued,
+      connected: !!server,
+      formDirty: formDirtyRef.current,
+      pending: pendingHitlCall(st),
+      pendingApproval: pendingApprovalCalls(st),
+      items: displayItemsFromState(st),
+    };
+  }, [conversationId, busy, formPending, approvalPending, queued, server]);
 
   return {
     messages,
@@ -576,6 +699,7 @@ export function useAgentChat({
     queued,
     setQueued,
     formPending,
+    approvalPending,
     activation,
     codeMode,
     workingDir,
@@ -587,6 +711,8 @@ export function useAgentChat({
     runUserTurn,
     resolvePendingForm,
     cancelPendingForm,
+    approvePendingTools,
+    rejectPendingTools,
     hydrate,
     resetChat,
     startProjectChat,
@@ -595,6 +721,8 @@ export function useAgentChat({
     sendBridge,
     submitBridge,
     cancelBridge,
+    approveBridge,
+    rejectBridge,
     bridgeState,
   };
 }

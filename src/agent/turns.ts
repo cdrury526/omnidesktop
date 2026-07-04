@@ -2,8 +2,8 @@ import { OpenRouter, stepCountIs } from "@openrouter/agent";
 import { HTTPClient } from "@openrouter/sdk";
 import { appFetch } from "../lib/tauri-fetch";
 import { LeakedToolCallError, LEAKED_TOOLCALL_RE } from "./toolcall-leak";
+import type { AgentTools } from "./build-tools";
 import { mergeTurnResponse, type TurnTelemetry } from "./telemetry";
-import type { McpTools } from "./mcp-tools";
 
 const SYSTEM_PROMPT =
   "You are a helpful desktop assistant running in a native app. You can call " +
@@ -95,7 +95,7 @@ export interface RunTurnArgs {
   model: string;
   userText: string;
   state: StateStore;
-  tools: McpTools;
+  tools: AgentTools;
   onTextDelta: (delta: string) => void;
   signal?: AbortSignal;
   workingDir?: string;
@@ -134,7 +134,7 @@ export interface OpenFormArgs {
   spec: unknown;
   toolName?: string;
   state: StateStore;
-  tools: McpTools;
+  tools: AgentTools;
   onTextDelta: (delta: string) => void;
 }
 
@@ -171,7 +171,7 @@ export interface RepairArgs {
   model: string;
   toolName?: string;
   state: StateStore;
-  tools: McpTools;
+  tools: AgentTools;
   onTextDelta: (delta: string) => void;
   signal?: AbortSignal;
   workingDir?: string;
@@ -215,7 +215,7 @@ export interface ResumeTurnArgs {
   callId: string;
   output: unknown;
   state: StateStore;
-  tools: McpTools;
+  tools: AgentTools;
   onTextDelta: (delta: string) => void;
   signal?: AbortSignal;
   workingDir?: string;
@@ -242,6 +242,49 @@ export async function resumeTurn({
     ] as never,
     state: state as never,
     tools,
+    stopWhen: stepCountIs(8),
+    allowFinalResponse: true,
+  });
+  wireAbort(result, signal);
+  const text = await streamText(result, onTextDelta, signal);
+  await captureTelemetry(result, telemetry, signal);
+  return text;
+}
+
+export interface ResumeApprovalArgs {
+  apiKey: string;
+  model: string;
+  approveToolCalls: string[];
+  rejectToolCalls?: string[];
+  state: StateStore;
+  tools: AgentTools;
+  onTextDelta: (delta: string) => void;
+  signal?: AbortSignal;
+  workingDir?: string;
+  telemetry?: TurnTelemetry;
+}
+
+/** Resume from SDK `awaiting_approval` via approveToolCalls / rejectToolCalls. */
+export async function resumeApprovalTurn({
+  apiKey,
+  model,
+  approveToolCalls,
+  rejectToolCalls = [],
+  state,
+  tools,
+  onTextDelta,
+  signal,
+  workingDir,
+  telemetry,
+}: ResumeApprovalArgs): Promise<string> {
+  const result = makeClient(apiKey).callModel({
+    model,
+    instructions: instructionsFor(workingDir),
+    input: [] as never,
+    state: state as never,
+    tools,
+    approveToolCalls,
+    rejectToolCalls,
     stopWhen: stepCountIs(8),
     allowFinalResponse: true,
   });

@@ -31,6 +31,10 @@ export interface DebugHandles {
   submit: (values: Record<string, unknown>) => Promise<unknown>;
   /** Cancel the pending HITL form (drives cancel headlessly). */
   cancel: () => Promise<unknown>;
+  /** Approve pending SDK tool calls (`awaiting_approval`). Optional call id list. */
+  approve: (callIds?: string[]) => Promise<unknown>;
+  /** Reject pending SDK tool calls (`awaiting_approval`). Optional call id list. */
+  reject: (callIds?: string[]) => Promise<unknown>;
   /** Summarize the active conversation (id, pending call, transcript items). */
   state: () => Promise<unknown>;
 }
@@ -409,6 +413,16 @@ export function useDebugBridge(handles: DebugHandles) {
               break;
             case "cancel":
               result = await ref.current.cancel();
+              break;
+            case "approve":
+              result = await ref.current.approve(
+                Array.isArray(params?.callIds) ? (params.callIds as string[]) : undefined,
+              );
+              break;
+            case "reject":
+              result = await ref.current.reject(
+                Array.isArray(params?.callIds) ? (params.callIds as string[]) : undefined,
+              );
               break;
             case "state":
               result = await ref.current.state();

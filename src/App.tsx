@@ -17,15 +17,12 @@ import {
   setSetting,
   listConversations,
   deleteConversation,
-  listToolRegistry,
   setToolEnabled,
   toolEnabledMap,
-  upsertToolRegistry,
   type ConversationRow,
-  type ToolRegistryInput,
   type ToolRegistryRow,
 } from "./lib/db";
-import { CODE_TOOL_DEFINITIONS } from "./agent/code-tools";
+import { loadActiveToolRegistry, syncToolRegistry } from "./lib/tool-registry";
 import { Button, Flex, Splitter, Typography } from "antd";
 import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import "./App.css";
@@ -98,8 +95,8 @@ export default function App() {
   }, []);
 
   const refreshToolRegistry = useCallback(async () => {
-    setToolRegistry(await listToolRegistry());
-  }, []);
+    setToolRegistry(await loadActiveToolRegistry(server?.url ?? null));
+  }, [server?.url]);
 
   useEffect(() => {
     void refreshConversations();
@@ -130,30 +127,10 @@ export default function App() {
 
   const toolPolicies = useMemo(() => toolEnabledMap(toolRegistry), [toolRegistry]);
 
-  const syncKnownTools = useCallback(
-    async (info = server) => {
-      const inputs: ToolRegistryInput[] = CODE_TOOL_DEFINITIONS.map((t) => ({
-        source: "builtin:code",
-        name: t.name,
-        title: t.title,
-        description: t.description,
-      }));
-      if (info) {
-        inputs.push(
-          ...[...info.tools.values()].map((t) => ({
-            source: "mcp" as const,
-            sourceId: info.url,
-            name: t.name,
-            title: t.title ?? t.name,
-            description: t.description ?? null,
-          })),
-        );
-      }
-      await upsertToolRegistry(inputs);
-      await refreshToolRegistry();
-    },
-    [server, refreshToolRegistry],
-  );
+  const syncKnownTools = useCallback(async () => {
+    await syncToolRegistry(server);
+    setToolRegistry(await loadActiveToolRegistry(server?.url ?? null));
+  }, [server]);
 
   useEffect(() => {
     void syncKnownTools();
@@ -237,6 +214,8 @@ export default function App() {
     send: async (text) => (await activeHandlers()?.send(text)) ?? { error: "no active session" },
     submit: async (values) => (await activeHandlers()?.submit(values)) ?? { error: "no active session" },
     cancel: async () => (await activeHandlers()?.cancel()) ?? { error: "no active session" },
+    approve: async (callIds) => (await activeHandlers()?.approve(callIds)) ?? { error: "no active session" },
+    reject: async (callIds) => (await activeHandlers()?.reject(callIds)) ?? { error: "no active session" },
     state: async () => (await activeHandlers()?.state()) ?? { error: "no active session" },
   });
 

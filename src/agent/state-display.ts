@@ -8,29 +8,58 @@ export interface PendingCall {
   args: Record<string, unknown>;
 }
 
+export type ToolCardStatus =
+  | "pending"
+  | "awaiting_approval"
+  | "done"
+  | "error"
+  | "cancelled"
+  | "rejected";
+
 export type DisplayItem =
   | { kind: "msg"; role: "user" | "assistant"; content: string }
   | {
       kind: "tool";
       callId: string;
       name: string;
-      status: "pending" | "done" | "error" | "cancelled";
+      status: ToolCardStatus;
       args?: unknown;
       result?: string;
     };
 
+function parsePendingCalls(state: unknown): PendingCall[] {
+  const s = state as { pendingToolCalls?: unknown[] } | null;
+  if (!s?.pendingToolCalls?.length) return [];
+  return s.pendingToolCalls
+    .map((raw) => {
+      const c = raw as { id?: string; callId?: string; name?: string; arguments?: unknown };
+      const callId = (c.id ?? c.callId) as string | undefined;
+      if (!callId) return null;
+      return {
+        callId,
+        name: c.name ?? "",
+        args: (c.arguments ?? {}) as Record<string, unknown>,
+      };
+    })
+    .filter((c): c is PendingCall => c != null);
+}
+
 export function pendingHitlCall(state: unknown): PendingCall | null {
-  const s = state as { status?: string; pendingToolCalls?: unknown[] } | null;
+  const s = state as { status?: string } | null;
   if (!s || s.status !== "awaiting_hitl") return null;
-  const c = s.pendingToolCalls?.[0] as
-    | { id?: string; callId?: string; name?: string; arguments?: unknown }
-    | undefined;
-  if (!c) return null;
-  return {
-    callId: (c.id ?? c.callId) as string,
-    name: c.name ?? "",
-    args: (c.arguments ?? {}) as Record<string, unknown>,
-  };
+  return parsePendingCalls(state)[0] ?? null;
+}
+
+/** SDK `awaiting_approval` — write/run tools paused for yes/no before execute. */
+export function pendingApprovalCalls(state: unknown): PendingCall[] {
+  const s = state as { status?: string } | null;
+  if (!s || s.status !== "awaiting_approval") return [];
+  return parsePendingCalls(state);
+}
+
+export function conversationAwaitingInput(state: unknown): boolean {
+  const s = state as { status?: string } | null;
+  return s?.status === "awaiting_hitl" || s?.status === "awaiting_approval";
 }
 
 function itemText(content: unknown): string {
@@ -54,8 +83,15 @@ function stripLeakedToolCall(text: string): string {
 }
 
 export function displayItemsFromState(state: unknown): DisplayItem[] {
-  const messages = (state as { messages?: unknown } | null)?.messages;
+  const messages = (state as { messages?: unknown; status?: string } | null)?.messages;
   if (!Array.isArray(messages)) return [];
+
+  const approvalIds = new Set(
+    ((state as { status?: string })?.status === "awaiting_approval"
+      ? pendingApprovalCalls(state)
+      : []
+    ).map((c) => c.callId),
+  );
 
   const out: DisplayItem[] = [];
   const cardByCall = new Map<string, Extract<DisplayItem, { kind: "tool" }>>();
@@ -75,7 +111,7 @@ export function displayItemsFromState(state: unknown): DisplayItem[] {
         kind: "tool",
         callId: callIdOf(item),
         name: (item.name as string) ?? "tool",
-        status: "pending",
+        status: approvalIds.has(callIdOf(item)) ? "awaiting_approval" : "pending",
         args,
       };
       cardByCall.set(card.callId, card);
@@ -90,9 +126,11 @@ export function displayItemsFromState(state: unknown): DisplayItem[] {
         card.result = output;
         card.status = output.includes('"cancelled"')
           ? "cancelled"
-          : output.includes('"error"')
-            ? "error"
-            : "done";
+          : output.includes('"rejected"') || output.includes("rejected by user")
+            ? "rejected"
+            : output.includes('"error"')
+              ? "error"
+              : "done";
       }
       continue;
     }

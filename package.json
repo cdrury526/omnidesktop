@@ -8,6 +8,7 @@
     "sandbox": "tsx sandbox-server.ts",
     "dev:all": "concurrently -k -n host,sandbox -c cyan,magenta \"vite\" \"tsx sandbox-server.ts\"",
     "build": "tsc && vite build",
+    "test:unit": "node --import tsx --test src/agent/*.test.ts",
     "preview": "vite preview",
     "tauri": "tauri",
     "docs:ingest": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- ingest docs",

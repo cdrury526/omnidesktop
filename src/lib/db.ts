@@ -82,6 +82,25 @@ export async function listToolRegistry(): Promise<ToolRegistryRow[]> {
   );
 }
 
+/** Built-ins plus MCP tools for the connected server (stale MCP rows stay in DB). */
+export async function listActiveToolRegistry(
+  activeMcpUrl: string | null,
+): Promise<ToolRegistryRow[]> {
+  if (activeMcpUrl) {
+    return dbSelect<ToolRegistryRow>(
+      "SELECT id, source, source_id, name, title, description, enabled, updated_at " +
+        "FROM tool_registry " +
+        "WHERE source = 'builtin:code' OR (source = 'mcp' AND source_id = ?) " +
+        "ORDER BY source, source_id, name",
+      [activeMcpUrl],
+    );
+  }
+  return dbSelect<ToolRegistryRow>(
+    "SELECT id, source, source_id, name, title, description, enabled, updated_at " +
+      "FROM tool_registry WHERE source = 'builtin:code' ORDER BY name",
+  );
+}
+
 export async function upsertToolRegistry(tools: ToolRegistryInput[]): Promise<void> {
   for (const t of tools) {
     await dbExecute(

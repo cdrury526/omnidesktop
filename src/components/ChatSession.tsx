@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { Bubble, Sender, ThoughtChain } from "@ant-design/x";
+import { Button, Space } from "antd";
 import { AssistantMarkdown } from "./MarkdownCode";
 import { ModelPicker } from "./ModelPicker";
 import { CodeModeToggle } from "./CodeModeToggle";
@@ -24,11 +25,16 @@ import type { ServerInfo, ToolCallInfo, ModelContext } from "../mcp/host-bridge"
 
 type ToolItem = Extract<DisplayItem, { kind: "tool" }>;
 
-const TOOL_STATUS: Record<ToolItem["status"], { status: "loading" | "success" | "error" | "abort"; label: string }> = {
+const TOOL_STATUS: Record<
+  ToolItem["status"],
+  { status: "loading" | "success" | "error" | "abort"; label: string }
+> = {
   pending: { status: "loading", label: "awaiting input" },
+  awaiting_approval: { status: "loading", label: "needs approval" },
   done: { status: "success", label: "done" },
   error: { status: "error", label: "error" },
   cancelled: { status: "abort", label: "cancelled" },
+  rejected: { status: "abort", label: "rejected" },
 };
 
 function pretty(v: unknown): string {
@@ -45,6 +51,8 @@ interface ToolStepProps {
   activation: ToolCallInfo | null;
   /** Structured context the inline app pushes back (submit/cancel/dirty). */
   onAppContext?: (ctx: ModelContext | null) => void;
+  onApprove?: (callId: string) => void;
+  onReject?: (callId: string) => void;
 }
 
 /**
@@ -53,7 +61,7 @@ interface ToolStepProps {
  * (kept expanded so it can't be collapsed away mid-form); otherwise the body is
  * the expandable args/result detail.
  */
-function ToolStep({ item, activation, onAppContext }: ToolStepProps) {
+function ToolStep({ item, activation, onAppContext, onApprove, onReject }: ToolStepProps) {
   const map = TOOL_STATUS[item.status];
   const key = item.callId || item.name;
 
@@ -70,6 +78,18 @@ function ToolStep({ item, activation, onAppContext }: ToolStepProps) {
 
   const content = showApp ? (
     <InlineAppMount activation={activation} onContextUpdate={onAppContext} />
+  ) : item.status === "awaiting_approval" ? (
+    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+      {detail && <pre className="tool-detail">{detail}</pre>}
+      <Space wrap>
+        <Button type="primary" size="small" onClick={() => onApprove?.(item.callId)}>
+          Approve
+        </Button>
+        <Button size="small" danger onClick={() => onReject?.(item.callId)}>
+          Reject
+        </Button>
+      </Space>
+    </Space>
   ) : detail ? (
     <pre className="tool-detail">{detail}</pre>
   ) : undefined;
@@ -85,7 +105,7 @@ function ToolStep({ item, activation, onAppContext }: ToolStepProps) {
           title: item.name,
           description: map.label,
           status: map.status,
-          blink: item.status === "pending",
+          blink: item.status === "pending" || item.status === "awaiting_approval",
           collapsible: !!content,
           content,
         },
@@ -110,6 +130,8 @@ export interface BridgeHandlers {
   send: (text: string) => Promise<unknown>;
   submit: (values: Record<string, unknown>) => Promise<unknown>;
   cancel: () => Promise<unknown>;
+  approve: (callIds?: string[]) => Promise<unknown>;
+  reject: (callIds?: string[]) => Promise<unknown>;
   state: () => Promise<unknown>;
 }
 
@@ -164,9 +186,10 @@ export function ChatSession({
     setConnError,
   });
   const {
-    messages, input, setInput, busy, queued, setQueued, formPending, activation,
+    messages, input, setInput, busy, queued, setQueued, formPending, approvalPending, activation,
     codeMode, workingDir, folderMissing, setCodeMode, setWorkingDir,
     submit, cancelTurn, hydrate, startProjectChat, onAppContext,
+    approvePendingTools, rejectPendingTools,
   } = chat;
 
   const composerBlocked = folderMissing && !!workingDir;
@@ -193,6 +216,8 @@ export function ChatSession({
       send: (text) => chatRef.current.sendBridge(text),
       submit: (values) => chatRef.current.submitBridge(values),
       cancel: () => chatRef.current.cancelBridge(),
+      approve: (callIds) => chatRef.current.approveBridge(callIds),
+      reject: (callIds) => chatRef.current.rejectBridge(callIds),
       state: () => chatRef.current.bridgeState(),
     };
     registerBridge(tabKey, handlers);
@@ -218,7 +243,13 @@ export function ChatSession({
         placement: "start" as const,
         variant: "borderless" as const,
         contentRender: (content: unknown) => (
-          <ToolStep item={content as ToolItem} activation={activation} onAppContext={onAppContext} />
+          <ToolStep
+            item={content as ToolItem}
+            activation={activation}
+            onAppContext={onAppContext}
+            onApprove={(callId) => void approvePendingTools([callId])}
+            onReject={(callId) => void rejectPendingTools([callId])}
+          />
         ),
       },
       queued: {
@@ -242,7 +273,7 @@ export function ChatSession({
         },
       },
     }),
-    [setQueued, activation, onAppContext],
+    [setQueued, activation, onAppContext, approvePendingTools, rejectPendingTools],
   );
 
   const bubbleItems = useMemo(() => {
@@ -324,7 +355,9 @@ export function ChatSession({
                     ? "Agent is working — Enter queues, ✕ cancels"
                     : formPending
                       ? "Form open — your message will queue (Enter)"
-                      : codeMode
+                      : approvalPending
+                        ? "Tool approval needed — your message will queue (Enter)"
+                        : codeMode
                         ? "Ask Omni to write code, refactor, or debug…"
                         : "Message… (Enter to send)"
             }

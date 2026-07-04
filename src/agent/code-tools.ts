@@ -12,6 +12,17 @@ export interface BuildCodeToolsArgs {
   isEnabled?: (name: string) => boolean;
 }
 
+/** Tools that mutate disk or run processes — gated by SDK requireApproval in ask mode. */
+const SENSITIVE_CODE_TOOLS = new Set(["write_file", "run_command"]);
+
+function requireApprovalFor(
+  name: string,
+  permissions?: CodeToolPermissions,
+): boolean | undefined {
+  if (!SENSITIVE_CODE_TOOLS.has(name)) return undefined;
+  return permissions?.mode !== "yolo";
+}
+
 export const CODE_TOOL_DEFINITIONS = [
   {
     name: "list_dir",
@@ -25,7 +36,11 @@ export const CODE_TOOL_DEFINITIONS = [
   },
 ];
 
-export function buildCodeTools({ workingDir, isEnabled = () => true }: BuildCodeToolsArgs): Tool[] {
+export function buildCodeTools({
+  workingDir,
+  permissions,
+  isEnabled = () => true,
+}: BuildCodeToolsArgs): Tool[] {
   const tools = [
     tool({
       name: "list_dir",
@@ -44,6 +59,7 @@ export function buildCodeTools({ workingDir, isEnabled = () => true }: BuildCode
           size: z.number().optional(),
         })),
       }),
+      ...(requireApprovalFor("list_dir", permissions) === true ? { requireApproval: true as const } : {}),
       execute: ({ path }) => fsListDir(workingDir, path),
     }),
     tool({
@@ -59,6 +75,7 @@ export function buildCodeTools({ workingDir, isEnabled = () => true }: BuildCode
         content: z.string(),
         bytes: z.number(),
       }),
+      ...(requireApprovalFor("read_file", permissions) === true ? { requireApproval: true as const } : {}),
       execute: ({ path }) => fsReadFile(workingDir, path),
     }),
   ];
