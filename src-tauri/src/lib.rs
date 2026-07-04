@@ -88,6 +88,8 @@ pub fn run() {
             db::db_execute,
             db::db_select,
             fs::path_is_dir,
+            fs::fs_list_dir,
+            fs::fs_read_file,
             debug::complete_debug_request,
             debug::save_snapshot
         ])

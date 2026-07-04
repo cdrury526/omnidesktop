@@ -20,13 +20,12 @@ interactive forms (HITL) with durable pause/resume, message queuing, cancel,
 The app is working end-to-end as a local AI desktop/workspace shell. The next
 sessions should move in this order:
 
-1. **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`,
-   `CODE_TOOLS_SDK_NOTES.md`) — add Rust-scoped `list_dir` / `read_file` first,
-   then `write_file` / `run_command` behind SDK `requireApproval`: default
+1. **Code mode phase 2 — write/run tools** (`CODE_MODE_BRIEF.md`,
+   `CODE_TOOLS_SDK_NOTES.md`) — read-only Code tools are in place. Next add
+   `write_file` / `run_command` behind SDK `requireApproval`: default
    ask/approve, optional `yolo` / `--dangerously-skip-permissions` that skips
    approval but never skips Rust path scoping, canonicalization, output limits,
-   or event logging. The current Code mode is prompt/context only; Rust
-   currently exposes only `path_is_dir`.
+   or event logging.
 2. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
    server manager UI, and real empty/error states for the Tools / Agents /
    Commands rail sections.
@@ -42,6 +41,21 @@ sessions should move in this order:
 `toolcall-leak.ts`, and `turn-repair.ts`. `useAgentChat.ts` was trimmed to the
 600-line repo limit by extracting bridge result helpers, error copy, and hook
 types. This should stay split before adding Code mode filesystem logic.
+
+## ✅ DONE — Code mode read-only tools
+
+Code mode now registers built-in `list_dir` and `read_file` SDK tools whenever a
+conversation has a reachable working folder. Tool execution goes through Rust
+commands (`fs_list_dir`, `fs_read_file`) with a shared canonicalizing resolver:
+the selected `working_dir` is canonicalized, requested paths are resolved, and
+anything outside the working folder is rejected. `read_file` is UTF-8 text only
+and bounded to 200 KiB. Unit tests cover normal in-root resolution and `..`
+escape rejection.
+
+No DB tool registry was added. Built-in Code tools are derived from app code and
+the active Code mode state; MCP tools are still runtime-discovered from connected
+servers. A DB registry only makes sense later for user-visible enable/disable,
+per-project policy overrides, or persisted tool configuration.
 
 ## ✅ DONE — Inline MCP Apps in the transcript (commit `5e055728`)
 
@@ -397,8 +411,8 @@ The chat→coding workspace is being built in phases (Stitch renders in
   per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
   reduce time-to-first-token with a snappier model. Not a bug.
 - **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md`: scoped
-  Rust `list_dir` / `read_file`, then `write_file` / `run_command` using the
-  permission-mode architecture in `CODE_TOOLS_SDK_NOTES.md`: SDK
+  Rust `list_dir` / `read_file` are done. Next: `write_file` / `run_command`
+  using the permission-mode architecture in `CODE_TOOLS_SDK_NOTES.md`: SDK
   `requireApproval` by default, optional yolo mode that skips approval only,
   never Rust scoping/logging.
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference

@@ -93,8 +93,8 @@ connect to an MCP server, and chat. To try an inline MCP App, run an
 
 ## Roadmap
 
-- Code mode filesystem tools: scoped read/list first, then write/command with
-  default SDK approval plus optional yolo mode
+- Code mode filesystem tools: scoped read/list are in place; write/command next
+  with default SDK approval plus optional yolo mode
 - Conversation rename · retry/regenerate · MCP server manager UI
 - Production cross-origin sandbox sidecar · bundle splitting
 - Turso cloud sync after the local coding workflow is solid

@@ -34,6 +34,7 @@ import {
   LeakedToolCallError,
   type DisplayItem,
 } from "../agent/runner";
+import { buildAgentTools } from "./agentChatTools";
 import { isFormSubmit, isFormCancel, readFormDirty, validateResult, type FormSpec } from "@omni/forms-dsl";
 import { Modal } from "antd";
 import { logEvent, type EventSource } from "../lib/events";
@@ -339,9 +340,9 @@ export function useAgentChat({
       const startedAt = performance.now();
       logEvent({ source, type: "turn.start", conversationId: convId, data: { model, chars: text.length } });
 
-      const tools = server ? buildMcpTools(server, summonPanel) : [];
       const state = conversationStateAccessor(convId);
       const workingDir = activeWorkingDir();
+      const tools = buildAgentTools(server, workingDir, summonPanel);
       const telemetry = emptyTelemetry();
       try {
         await runTurn({ apiKey, model, userText: text, state, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir, telemetry });
@@ -411,8 +412,7 @@ export function useAgentChat({
     });
   }, [busy, formPending, queued, conversationId, runUserTurn]);
 
-  /**
-   * Feed an output back to the pending HITL call and resume. `build` derives the
+  /** Feed an output back to the pending HITL call and resume. `build` derives the
    * output + the form_events log from the pending call. Shared by submit/cancel.
    */
   const resumePendingCall = useCallback(
@@ -439,7 +439,7 @@ export function useAgentChat({
       setMessages((m) => [...m, { kind: "msg", role: "assistant", content: "" }]);
 
       const accessor = conversationStateAccessor(convId);
-      const tools = server ? buildMcpTools(server, summonPanel) : [];
+      const tools = buildAgentTools(server, activeWorkingDir(), summonPanel);
       const telemetry = emptyTelemetry();
       try {
         await resumeTurn({ apiKey, model, callId: pending.callId, output: built.output, state: accessor, tools, onTextDelta: appendDeltaToLastAssistant, signal: controller.signal, workingDir: activeWorkingDir(), telemetry });

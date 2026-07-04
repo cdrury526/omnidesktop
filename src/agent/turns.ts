@@ -29,9 +29,10 @@ function instructionsFor(workingDir?: string): string {
     "You are in code mode for a software project. The working folder for this " +
     `session is \`${workingDir}\`. Treat it as the project root: when the user ` +
     'says "the project", "this repo", or names files without an absolute path, ' +
-    "resolve them relative to that folder. You do NOT have file-access tools " +
-    "yet, so do not claim to have read, listed, or written any files — reason " +
-    "from what the user tells you and ask for file contents when you need them."
+    "resolve them relative to that folder. You can list directories and read " +
+    "UTF-8 text files through the available Code mode tools. You cannot write " +
+    "files or run commands yet, so do not claim to have modified files or " +
+    "executed commands."
   );
 }
 
