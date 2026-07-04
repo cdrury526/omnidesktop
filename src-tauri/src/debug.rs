@@ -12,6 +12,8 @@
 //!   POST /send     {text}             -> run a chat turn with `text`
 //!   POST /submit   {values}           -> resolve the pending HITL form
 //!   POST /cancel                       -> cancel the pending HITL form
+//!   POST /approve  {callIds?}          -> approve pending Code tool calls
+//!   POST /reject   {callIds?}          -> reject pending Code tool calls
 //!   POST /click    {selector}         -> synthetic click on a host element
 //!   POST /drag     {selector,dx,dy}   -> synthetic pointer drag on host element
 //!   POST /type     {selector,text}    -> set a host input's value (React-aware)
@@ -314,6 +316,8 @@ fn handle_request(mut request: tiny_http::Request, app: &tauri::AppHandle) {
         ("POST", "/send") => wait(app, "send", read_body(&mut request)),
         ("POST", "/submit") => wait(app, "submit", read_body(&mut request)),
         ("POST", "/cancel") => wait(app, "cancel", json!({})),
+        ("POST", "/approve") => wait(app, "approve", read_body(&mut request)),
+        ("POST", "/reject") => wait(app, "reject", read_body(&mut request)),
         // Synthetic user input on the HOST document.
         ("POST", "/click") => wait(app, "click", read_body(&mut request)),
         ("POST", "/drag") => wait(app, "drag", read_body(&mut request)),

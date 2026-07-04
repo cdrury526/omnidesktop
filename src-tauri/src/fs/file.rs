@@ -13,6 +13,7 @@ pub struct DirEntryInfo {
     name: String,
     path: String,
     kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     size: Option<u64>,
 }
 

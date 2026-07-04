@@ -1,4 +1,4 @@
-use super::file::fs_write_file;
+use super::file::{fs_list_dir, fs_write_file};
 use super::path::{resolve_inside_working_dir, resolve_write_path_inside_working_dir};
 use super::process::run_command_blocking;
 use std::fs;
@@ -66,6 +66,33 @@ fn write_file_creates_file_inside_root() {
         fs::read_to_string(root.join("created.txt")).unwrap(),
         "hello"
     );
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn list_dir_omits_size_for_directories() {
+    let root = temp_root();
+    fs::create_dir(root.join("nested")).expect("create nested dir");
+    fs::write(root.join("file.txt"), "hello").expect("write file");
+
+    let result = fs_list_dir(
+        root.to_string_lossy().into_owned(),
+        ".".to_string(),
+    )
+    .expect("list dir");
+    let json = serde_json::to_value(result).expect("serialize list result");
+    let entries = json["entries"].as_array().expect("entries array");
+    let nested = entries
+        .iter()
+        .find(|entry| entry["name"] == "nested")
+        .expect("nested entry");
+    let file = entries
+        .iter()
+        .find(|entry| entry["name"] == "file.txt")
+        .expect("file entry");
+
+    assert!(nested.get("size").is_none());
+    assert_eq!(file["size"], 5);
     fs::remove_dir_all(root).ok();
 }
 
