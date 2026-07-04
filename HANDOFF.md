@@ -18,16 +18,56 @@ interactive forms (HITL) with durable pause/resume, message queuing, cancel,
 ## ▶ NEXT TASKS — roadmap for future sessions
 
 The tool **registry and SDK assembly pipeline are done** (commits `e8f9339`,
-`f095061`). The next session should **build Code mode write/run tools and register
-them** — not redesign the registry.
+`f095061`). Code mode now has read/list/write/run built-ins. **Before adding
+more Code tools**, read and work from **`CODE_TOOLS_HARDENING_PLAN.md`**. It
+tracks the next cleanup/hardening pass: Rust fs module split, shared execution
+telemetry, normalized Code tool result/error shape, blocking-safe command
+execution, a `CodeToolContext`, and a built-in tool capability test matrix.
 
-### 1. Code mode phase 2 — `write_file` + `run_command` (start here)
+### 1. Code tools hardening (start here before more tools)
+
+Use `CODE_TOOLS_HARDENING_PLAN.md` as the source of truth. Suggested first slice:
+shared Code tool execution telemetry plus the capability table tests, then split
+`src-tauri/src/fs.rs` by concern while behavior is still small.
+
+### 2. Productize workspace basics
+
+Conversation rename, retry/regenerate, MCP server manager UI, real empty/error
+states for Tools / Agents / Commands rail sections.
+
+### 3. Production hardening
+
+Production sandbox sidecar, bundle splitting, README/release packaging checks.
+
+### 4. Sync later
+
+Turso/cloud sync — after the local coding workflow is solid.
+
+## ✅ DONE — Code mode phase 2: `write_file` + `run_command` (commit `6ee790b3`)
+
+Code mode now registers `write_file` and `run_command` alongside `list_dir` and
+`read_file`. Rust commands enforce working-directory scope, write size limits,
+command cwd confinement, command timeout, and bounded stdout/stderr. Sensitive
+tools use SDK `requireApproval` in default ask mode; registry sync automatically
+upserts the new built-ins from `CODE_TOOL_DEFINITIONS`. The Code mode prompt now
+describes write/run capabilities and approval behavior.
+
+Verified:
+- `./node_modules/.bin/tsc --noEmit`
+- `./node_modules/.bin/vite build`
+- `pnpm test:unit`
+- `cargo test --manifest-path src-tauri/Cargo.toml fs::tests`
+- `cargo build --manifest-path src-tauri/Cargo.toml`
+- Debug bridge: Tools rail rendered `list_dir`, `read_file`, `write_file`, and
+  `run_command`.
+
+### Implementation notes
 
 Read `CODE_MODE_BRIEF.md`, `CODE_TOOLS_SDK_NOTES.md`, and **`AGENTS.md` →
-“Tools and tool registry”** before touching code. Look up SDK APIs with
+“Tools and tool registry”** before changing Code tools. Look up SDK APIs with
 `pnpm docs:search --mirror openrouter-agent-sdk requireApproval`.
 
-**Order of work:**
+**What landed:**
 
 1. **Rust primitives** (`src-tauri/src/fs.rs` + `lib.rs` commands)
    - `fs_write_file(working_dir, path, content)` — scoped like read; reject
@@ -69,19 +109,6 @@ Read `CODE_MODE_BRIEF.md`, `CODE_TOOLS_SDK_NOTES.md`, and **`AGENTS.md` →
    - Bridge: code mode on + folder set → ask model to write a file → Approve →
      confirm file on disk; `/reject` on a command call; `/events` shows
      `tool.approve` / `tool.result`.
-
-### 2. Productize workspace basics
-
-Conversation rename, retry/regenerate, MCP server manager UI, real empty/error
-states for Tools / Agents / Commands rail sections.
-
-### 3. Production hardening
-
-Production sandbox sidecar, bundle splitting, README/release packaging checks.
-
-### 4. Sync later
-
-Turso/cloud sync — after the local coding workflow is solid.
 
 ## ✅ DONE — Agent internals split (commit `10f2dfe`)
 
