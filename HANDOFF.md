@@ -18,22 +18,22 @@ interactive forms (HITL) with durable pause/resume, message queuing, cancel,
 ## ▶ NEXT TASKS — roadmap for future sessions
 
 The tool **registry and SDK assembly pipeline are done** (commits `e8f9339`,
-`f095061`). Code mode now has read/list/write/run built-ins. **Before adding
-more Code tools**, read and work from **`CODE_TOOLS_HARDENING_PLAN.md`**. It
-tracks the next cleanup/hardening pass: Rust fs module split, shared execution
-telemetry, normalized Code tool result/error shape, blocking-safe command
-execution, a `CodeToolContext`, and a built-in tool capability test matrix.
+`f095061`). Code mode now has read/list/write/run built-ins, and
+`CODE_TOOLS_HARDENING_PLAN.md` has been implemented: Rust fs concerns are split,
+Code tool execution telemetry is shared, results are normalized, command
+execution is blocking-safe at the Tauri boundary, `CodeToolContext` exists, and
+capability-table tests guard built-in drift.
 
-### 1. Code tools hardening (start here before more tools)
-
-Use `CODE_TOOLS_HARDENING_PLAN.md` as the source of truth. Suggested first slice:
-shared Code tool execution telemetry plus the capability table tests, then split
-`src-tauri/src/fs.rs` by concern while behavior is still small.
-
-### 2. Productize workspace basics
+### 1. Productize workspace basics
 
 Conversation rename, retry/regenerate, MCP server manager UI, real empty/error
 states for Tools / Agents / Commands rail sections.
+
+### 2. Next Code tools
+
+Good candidates are `edit_file` / patch application, `search_files`, and a
+project file tree. Reuse `CodeToolContext`, `executeCodeTool`, and the Rust
+`fs::path` resolver instead of adding per-tool policy or path checks.
 
 ### 3. Production hardening
 
@@ -42,6 +42,23 @@ Production sandbox sidecar, bundle splitting, README/release packaging checks.
 ### 4. Sync later
 
 Turso/cloud sync — after the local coding workflow is solid.
+
+## ✅ DONE — Code tools hardening
+
+`CODE_TOOLS_HARDENING_PLAN.md` is implemented:
+
+- `src-tauri/src/fs.rs` is now the Tauri command boundary, with implementation
+  split into `fs/path.rs`, `fs/file.rs`, `fs/process.rs`, and `fs/tests.rs`.
+- `run_command` uses `tauri::async_runtime::spawn_blocking` at the command
+  boundary so command execution does not block unrelated Tauri command handling.
+- `src/agent/code-tool-telemetry.ts` wraps all Code tool executions and emits
+  `code_tool.start`, `code_tool.end`, and `code_tool.error` events.
+- Code tool outputs are normalized as `{ ok: true, data }` or
+  `{ ok: false, error, code }`.
+- `CodeToolContext` centralizes working folder, permission mode, enablement, and
+  execution logging for future tools.
+- `CODE_TOOL_CAPABILITIES` plus unit tests prevent registry/implementation and
+  sensitivity/approval drift.
 
 ## ✅ DONE — Code mode phase 2: `write_file` + `run_command` (commit `6ee790b3`)
 

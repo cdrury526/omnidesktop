@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { tool } from "@openrouter/agent";
 import { z } from "zod";
-import { buildCodeTools, CODE_TOOL_DEFINITIONS } from "./code-tools";
+import { buildCodeTools, CODE_TOOL_CAPABILITIES, CODE_TOOL_DEFINITIONS } from "./code-tools";
 import { assertUniqueToolNames, dedupeToolNames, toolFunctionName } from "./tool-names";
 import { isToolEnabled, toolPolicyKey } from "./tool-policy";
 
@@ -50,26 +50,52 @@ describe("code-tools", () => {
   const requireApprovalOf = (t: unknown): unknown =>
     (t as { function?: { requireApproval?: unknown } }).function?.requireApproval;
 
-  it("registers read, write, and command built-ins for registry sync", () => {
+  const capabilities = [
+    { name: "list_dir", sensitive: false },
+    { name: "read_file", sensitive: false },
+    { name: "write_file", sensitive: true },
+    { name: "run_command", sensitive: true },
+  ];
+
+  it("keeps the built-in capability table explicit", () => {
     assert.deepEqual(
-      CODE_TOOL_DEFINITIONS.map((t) => t.name),
-      ["list_dir", "read_file", "write_file", "run_command"],
+      CODE_TOOL_CAPABILITIES.map(({ name, sensitive }) => ({ name, sensitive })),
+      capabilities,
     );
   });
 
-  it("gates write and command tools with SDK approval in ask mode", () => {
-    const tools = buildCodeTools({ workingDir: "/tmp/project", permissions: { mode: "ask" } });
-    const byName = new Map(tools.map((t) => [toolFunctionName(t), t]));
-    assert.equal(requireApprovalOf(byName.get("list_dir")), undefined);
-    assert.equal(requireApprovalOf(byName.get("read_file")), undefined);
-    assert.equal(requireApprovalOf(byName.get("write_file")), true);
-    assert.equal(requireApprovalOf(byName.get("run_command")), true);
+  it("registers every built-in capability for registry sync", () => {
+    assert.deepEqual(
+      CODE_TOOL_DEFINITIONS.map((t) => t.name),
+      capabilities.map((t) => t.name),
+    );
+    for (const def of CODE_TOOL_DEFINITIONS) {
+      assert.ok(def.title.length > 0, `${def.name} needs a registry title`);
+      assert.ok(def.description.length > 0, `${def.name} needs a registry description`);
+    }
   });
 
-  it("skips write and command SDK approval in yolo mode", () => {
-    const tools = buildCodeTools({ workingDir: "/tmp/project", permissions: { mode: "yolo" } });
-    const byName = new Map(tools.map((t) => [toolFunctionName(t), t]));
-    assert.equal(requireApprovalOf(byName.get("write_file")), undefined);
-    assert.equal(requireApprovalOf(byName.get("run_command")), undefined);
+  it("implements every registered built-in", () => {
+    const tools = buildCodeTools({ workingDir: "/tmp/project", permissions: { mode: "ask" } });
+    assert.deepEqual(tools.map(toolFunctionName), capabilities.map((t) => t.name));
+  });
+
+  it("matches approval behavior to sensitivity in ask and yolo modes", () => {
+    const askTools = new Map(
+      buildCodeTools({ workingDir: "/tmp/project", permissions: { mode: "ask" } })
+        .map((t) => [toolFunctionName(t), t]),
+    );
+    const yoloTools = new Map(
+      buildCodeTools({ workingDir: "/tmp/project", permissions: { mode: "yolo" } })
+        .map((t) => [toolFunctionName(t), t]),
+    );
+
+    for (const capability of capabilities) {
+      assert.equal(
+        requireApprovalOf(askTools.get(capability.name)),
+        capability.sensitive ? true : undefined,
+      );
+      assert.equal(requireApprovalOf(yoloTools.get(capability.name)), undefined);
+    }
   });
 });

@@ -1,8 +1,18 @@
 # Code Tools Hardening Plan
 
-Planning notes for tightening Code mode before adding more built-in tools. The
-goal is to make future tools cheaper to add, easier to observe, and safer to
-reason about.
+Status notes for the Code mode hardening pass. The goal was to make future tools
+cheaper to add, easier to observe, and safer to reason about.
+
+## Status
+
+Implemented in the Code tools hardening pass:
+
+- Rust fs helpers split by concern.
+- Shared Code tool execution telemetry.
+- Normalized Code tool result/error shape.
+- `run_command` isolated with `spawn_blocking` at the Tauri command boundary.
+- `CodeToolContext` introduced in the agent tool layer.
+- Built-in tool capability table covered by unit tests.
 
 ## Context
 
@@ -11,25 +21,24 @@ Code mode currently has built-in `list_dir`, `read_file`, `write_file`, and
 `CODE_TOOL_DEFINITIONS` feeds registry sync, `buildAgentTools()` applies persisted
 enable/disable policy, and sensitive tools use SDK approval in default ask mode.
 
-Before adding tools like `edit_file`, `search_files`, `apply_patch`, or symbol
-navigation, harden the shared tool plumbing below.
+The next Code tools can build on this plumbing instead of adding one-off policy,
+telemetry, result, or path-scope handling.
 
 ## 1. Split Rust fs Command Helpers by Concern
 
-`src-tauri/src/fs.rs` is still manageable, but it now holds path resolution,
-file IO, process execution, command result structs, and tests. Split it before
-adding more primitives.
+`src-tauri/src/fs.rs` now stays as the public Tauri command boundary. The
+implementation is split below it by concern.
 
-Suggested structure:
+Current structure:
 
-- `src-tauri/src/fs/mod.rs` — public Tauri command exports and shared constants
+- `src-tauri/src/fs.rs` — public Tauri command exports
 - `src-tauri/src/fs/path.rs` — canonical root, path resolution, scope checks,
   symlink escape rejection
 - `src-tauri/src/fs/file.rs` — list/read/write operations and result structs
 - `src-tauri/src/fs/process.rs` — command execution, timeout, output truncation
-- `src-tauri/src/fs/tests.rs` or module-local tests grouped by concern
+- `src-tauri/src/fs/tests.rs` — scoped filesystem and command tests
 
-Acceptance criteria:
+Preserved:
 
 - Existing Tauri command names stay stable: `fs_list_dir`, `fs_read_file`,
   `fs_write_file`, `run_command`, `path_is_dir`.
@@ -39,10 +48,10 @@ Acceptance criteria:
 
 ## 2. Add Shared Tool Execution Telemetry
 
-Approval decisions are logged, but Code tool execution should also emit
+Approval decisions were already logged. Code tool execution now also emits
 structured app events from the JS SDK execution path.
 
-Add a thin helper around Code tool `execute` functions that logs:
+`src/agent/code-tool-telemetry.ts` wraps Code tool `execute` functions and logs:
 
 - tool name
 - path or command summary
@@ -50,7 +59,7 @@ Add a thin helper around Code tool `execute` functions that logs:
 - duration
 - truncation or timeout flags
 
-Suggested event types:
+Event types:
 
 - `code_tool.start`
 - `code_tool.end`
@@ -60,31 +69,30 @@ Keep sensitive payloads out of events. For `write_file`, log path and byte count
 not full content. For `run_command`, log command/args, cwd, exit code, timeout,
 and truncation flags.
 
-Acceptance criteria:
+Payload rules:
 
 - All built-in Code tools use the same telemetry wrapper.
 - Events are emitted for success and failure.
-- The debug bridge `/events` stream can confirm write/run execution after
-  approval.
+- `write_file` logs path and byte count, not full content.
+- `run_command` logs command/args, cwd, exit code, timeout, and truncation flags.
 
 ## 3. Normalize Code Tool Result and Error Shape
 
-Future tools will be easier for models and UI cards if Code tools return a
-consistent shape instead of mixing successful result objects with thrown string
-errors.
+Code tools now return a consistent shape instead of mixing successful result
+objects with thrown string errors.
 
-Candidate shape:
+Current shape:
 
 ```ts
 type CodeToolResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string; code: string; details?: unknown };
+  | { ok: false; error: string; code: string };
 ```
 
-The SDK can still surface unexpected exceptions, but expected operational
-failures should be structured where practical.
+Expected operational failures are returned as `{ ok: false, error, code }` and
+also logged as `code_tool.error`.
 
-Consider codes such as:
+Current error codes include:
 
 - `path_escape`
 - `not_found`
@@ -96,7 +104,7 @@ Consider codes such as:
 - `command_timeout`
 - `spawn_failed`
 
-Acceptance criteria:
+Result behavior:
 
 - Code tool outputs are predictable for success and expected failure.
 - UI/tool cards can summarize failures without parsing arbitrary strings.
@@ -104,14 +112,9 @@ Acceptance criteria:
 
 ## 4. Make Command Execution Async or Blocking-Safe in Rust
 
-`run_command` currently uses a polling loop and blocks the Tauri command handler
-thread while the child process runs. This is acceptable for the first slice, but
-heavier use will run tests/builds often.
-
-Preferred options:
-
-- Use async process handling where it fits Tauri's runtime cleanly.
-- Or isolate blocking work with `tauri::async_runtime::spawn_blocking`.
+The process implementation remains a synchronous primitive for testability, but
+the public Tauri `run_command` command now calls it through
+`tauri::async_runtime::spawn_blocking`.
 
 Preserve current safety properties:
 
@@ -121,7 +124,7 @@ Preserve current safety properties:
 - bounded stdout/stderr
 - killed process on timeout
 
-Acceptance criteria:
+Preserved:
 
 - Long-running commands do not block unrelated Tauri command handling.
 - Timeout behavior remains deterministic.
@@ -129,36 +132,29 @@ Acceptance criteria:
 
 ## 5. Introduce a CodeToolContext
 
-`buildCodeTools` currently receives `workingDir`, `permissions`, and `isEnabled`.
-As tools grow, centralize the execution context so new tools inherit shared
+`buildCodeTools` now creates a `CodeToolContext` so new tools inherit shared
 policy and observability.
 
-Candidate shape:
+Current shape:
 
 ```ts
 interface CodeToolContext {
   workingDir: string;
   permissions: CodeToolPermissions;
   isEnabled: (name: string) => boolean;
-  limits: {
-    maxReadBytes: number;
-    maxWriteBytes: number;
-    maxCommandOutputBytes: number;
-    defaultCommandTimeoutMs: number;
-    maxCommandTimeoutMs: number;
-  };
-  logExecution: <T>(
+  execute: <T>(
     name: string,
     summary: Record<string, unknown>,
     run: () => Promise<T>,
-  ) => Promise<T>;
+    resultSummary?: (result: T) => Record<string, unknown>,
+  ) => Promise<CodeToolResult<T>>;
 }
 ```
 
 This should stay in the agent/tool layer. Rust remains the enforcement
 chokepoint for filesystem scope and process cwd confinement.
 
-Acceptance criteria:
+Notes:
 
 - New Code tools do not each hand-roll telemetry, permissions, or limits.
 - Existing `buildAgentTools()` call sites stay simple.
@@ -166,9 +162,10 @@ Acceptance criteria:
 
 ## 6. Add a Tool Capability Table in Tests
 
-Add a small test matrix for built-ins to prevent registry/implementation drift.
+`CODE_TOOL_CAPABILITIES` is now the source table for built-ins and unit tests
+cover it to prevent registry/implementation drift.
 
-The table should cover:
+The table covers:
 
 - registered in `CODE_TOOL_DEFINITIONS`
 - implemented by `buildCodeTools`
@@ -176,7 +173,7 @@ The table should cover:
 - default approval behavior
 - registry-visible title and description
 
-Candidate table:
+Current table:
 
 ```ts
 const CODE_TOOL_CAPABILITIES = [
@@ -187,20 +184,11 @@ const CODE_TOOL_CAPABILITIES = [
 ];
 ```
 
-Acceptance criteria:
+Test coverage:
 
 - A missing implementation for a registered tool fails tests.
 - A missing registry definition for an implemented tool fails tests.
 - Approval behavior matches sensitivity in ask/yolo modes.
-
-## Suggested Order
-
-1. Add shared telemetry and the capability table first. They improve confidence
-   before behavior changes.
-2. Split Rust modules while behavior is still small and well covered.
-3. Normalize result/error shapes.
-4. Make command execution async or blocking-safe.
-5. Introduce `CodeToolContext` when telemetry/result conventions are settled.
 
 ## Verification
 
