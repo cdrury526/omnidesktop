@@ -35,6 +35,18 @@ These are intentionally untracked — never `git add` them: `.env`, `.cursor/`,
 (`dist/`, `target/`). API keys live in the OS keyring; the DB and any tokens stay
 behind Rust (see the secrets guardrail in `HANDOFF.md`).
 
+## Docs mirrors are agent reference tooling
+
+`docs/` and the `pnpm docs:*` / `omni-docs` commands are dev-time lookup tools
+for agents working on integrations like OpenRouter or AG-UI. They are not an
+in-app feature area and should not pull the product roadmap away from Omni
+Desktop itself.
+
+Before OpenRouter or AG-UI implementation work, prefer checking local docs with
+`pnpm docs:index --compact`, `pnpm docs:search --json ...`, or `pnpm docs:open
+-- <id>` instead of guessing APIs from memory. See `docs/README.md` for command
+examples and `docs/doc-cli-backlog.md` for the tooling backlog.
+
 ## Commit messages
 
 Conventional, imperative subject; brief body on the why + what was verified. End
