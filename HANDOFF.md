@@ -17,22 +17,71 @@ interactive forms (HITL) with durable pause/resume, message queuing, cancel,
 
 ## ▶ NEXT TASKS — roadmap for future sessions
 
-The app is working end-to-end as a local AI desktop/workspace shell. The next
-sessions should move in this order:
+The tool **registry and SDK assembly pipeline are done** (commits `e8f9339`,
+`f095061`). The next session should **build Code mode write/run tools and register
+them** — not redesign the registry.
 
-1. **Code mode phase 2 — write/run tools** (`CODE_MODE_BRIEF.md`,
-   `CODE_TOOLS_SDK_NOTES.md`) — read-only Code tools are in place. Next add
-   `write_file` / `run_command` behind SDK `requireApproval`: default
-   ask/approve, optional `yolo` / `--dangerously-skip-permissions` that skips
-   approval but never skips Rust path scoping, canonicalization, output limits,
-   or event logging.
-2. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
-   server manager UI, and real empty/error states for the Tools / Agents /
-   Commands rail sections.
-3. **Production hardening** — production sandbox sidecar, bundle splitting,
-   README/release packaging sanity checks.
-4. **Sync later** — Turso/cloud sync should wait until the local coding workflow
-   is solid.
+### 1. Code mode phase 2 — `write_file` + `run_command` (start here)
+
+Read `CODE_MODE_BRIEF.md`, `CODE_TOOLS_SDK_NOTES.md`, and **`AGENTS.md` →
+“Tools and tool registry”** before touching code. Look up SDK APIs with
+`pnpm docs:search --mirror openrouter-agent-sdk requireApproval`.
+
+**Order of work:**
+
+1. **Rust primitives** (`src-tauri/src/fs.rs` + `lib.rs` commands)
+   - `fs_write_file(working_dir, path, content)` — scoped like read; reject
+     symlink escape; optional max write size.
+   - `run_command(working_dir, command, args?, timeout_ms?)` — `cwd` locked to
+     scoped working dir; capture stdout/stderr; bounded output; no shell injection
+     (prefer explicit argv, not `sh -c` unless documented and bounded).
+   - Unit tests: in-root write, `..` escape rejected, command cwd confinement.
+
+2. **Frontend invoke wrappers** (`src/lib/fs.ts`) — mirror `fsListDir` /
+   `fsReadFile`.
+
+3. **SDK tools** (`src/agent/code-tools.ts`)
+   - Add entries to **`CODE_TOOL_DEFINITIONS`** (title + description — this is
+     what the Tools rail and registry sync use).
+   - Register `tool({ name: "write_file", … requireApproval, execute })` and
+     `run_command` in **`buildCodeTools`**.
+   - Names must be in **`SENSITIVE_CODE_TOOLS`** so `permissions.mode === "ask"`
+     sets `requireApproval: true`; `yolo` skips approval only.
+   - Never call Rust from hooks — only from `execute`.
+
+4. **Registry** — **no migration needed** for new built-ins. On app load /
+   MCP connect, `syncToolRegistry()` upserts from `CODE_TOOL_DEFINITIONS`
+   automatically. After adding definitions, verify the Tools rail lists
+   `write_file` / `run_command` under **Code** and that toggling **off** removes
+   them from `buildAgentTools` (check `/state` or a turn with tools disabled).
+
+5. **Prompt + UX**
+   - Update `instructionsFor()` in `turns.ts` — stop saying “cannot write or run
+     commands”; describe what write/run can do and that approval is required in
+     ask mode.
+   - Optional: permission mode toggle in Settings or Code header (`ask` / `yolo`);
+     thread through `buildAgentTools({ permissions })`.
+   - Approval UI + `/approve` / `/reject` bridge are **already wired** — exercise
+     them on first write/run tool call.
+
+6. **Verify**
+   - `tsc --noEmit`, `vite build`, `cargo build`, `pnpm test:unit`
+   - Bridge: code mode on + folder set → ask model to write a file → Approve →
+     confirm file on disk; `/reject` on a command call; `/events` shows
+     `tool.approve` / `tool.result`.
+
+### 2. Productize workspace basics
+
+Conversation rename, retry/regenerate, MCP server manager UI, real empty/error
+states for Tools / Agents / Commands rail sections.
+
+### 3. Production hardening
+
+Production sandbox sidecar, bundle splitting, README/release packaging checks.
+
+### 4. Sync later
+
+Turso/cloud sync — after the local coding workflow is solid.
 
 ## ✅ DONE — Agent internals split (commit `10f2dfe`)
 
@@ -52,14 +101,38 @@ anything outside the working folder is rejected. `read_file` is UTF-8 text only
 and bounded to 200 KiB. Unit tests cover normal in-root resolution and `..`
 escape rejection.
 
-## ✅ DONE — Tool registry / enable-disable policy
+## ✅ DONE — Tool system + registry pipeline (commits `e8f9339`, `f095061`)
+
+The tool stack is now a single pipeline aligned with the OpenRouter Agent SDK.
+Full agent rules live in **`AGENTS.md` → “Tools and tool registry”**.
+
+**Assembly (every turn):** `buildAgentTools()` in `src/agent/build-tools.ts` —
+exported via `runner.ts`. Filters by persisted policy, prefers host Code tools
+over MCP on name collision, asserts unique names before `callModel`. Hooks must
+not call `buildMcpTools` / `buildCodeTools` directly.
+
+**Registry (policy, not execution):**
+- Table `tool_registry` (migration `0007`) — keys: `builtin:code` + name; `mcp`
+  + server URL + name.
+- `syncToolRegistry(server)` / `loadActiveToolRegistry(url)` in
+  `src/lib/tool-registry.ts` — upsert on connect; Tools panel shows **active**
+  tools only (stale MCP rows kept in DB for reconnect prefs).
+- Missing row → **enabled**. Disabled tools never reach the model context.
+
+**SDK pause paths (both wired):**
+- `awaiting_hitl` — MCP forms → `resumeTurn` + `function_call_output`.
+- `awaiting_approval` — `requireApproval` tools → Approve/Reject on tool card +
+  `resumeApprovalTurn` + bridge `/approve` / `/reject`.
+
+**Tests:** `pnpm test:unit` — policy defaults, tool name dedupe/collision.
+
+## ✅ DONE — Tool registry / enable-disable policy (migration `0007`)
 
 Migration `0007_tool_registry.sql` adds a persisted registry for built-in Code
 tools and discovered MCP tools. The Tools rail panel lets users disable tools
-they do not need; disabled tools are filtered before the SDK `callModel` tool
-list is built, so they do not consume tool context/tokens. Built-in Code tools
-use source `builtin:code`; MCP tools are keyed by source `mcp` plus server URL.
-Missing policy rows default to enabled so discovery is non-breaking.
+they do not need; disabled tools are filtered in `buildAgentTools` before the SDK
+`callModel` tool list is built. See **Tool system + registry pipeline** above
+for the current sync/assembly flow.
 
 ## ✅ DONE — Inline MCP Apps in the transcript (commit `5e055728`)
 
@@ -118,7 +191,8 @@ auto MCP connect + `mcp.connect.*` events, and split view.
   `codeMode`/`workingDir` state, loads it in `hydrate`, persists on
   toggle/change and on new-chat creation. **New chats default to off.**
 - `turns.ts` `instructionsFor(workingDir)` appends a Code-mode prompt section
-  (explicitly honest that there are NO file tools yet); threaded through
+  (lists available Code tools; update when adding write/run — see ▶ NEXT TASKS);
+  threaded through
   `runTurn`/`resumeTurn`/`repairToolCall`.
 - `src/components/CodeModeToggle.tsx` — header Chat/Code switch + folder chip
   (name shown, full path on hover, change/clear).
@@ -173,6 +247,7 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 ```
 - Frontend typecheck: `./node_modules/.bin/tsc --noEmit`
 - Frontend build: `./node_modules/.bin/vite build`
+- Agent/tool unit tests: `pnpm test:unit`
 - Rust build: `cd src-tauri && cargo build`
 - A demo MCP App server: clone `modelcontextprotocol/ext-apps`, then
   `cd examples/basic-server-react && bun install && bun run build && PORT=3001 bun main.ts`
@@ -192,7 +267,10 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 | Inline MCP App mount (sandbox iframe embedded on its tool card) | `src/components/InlineAppMount.tsx` |
 | Searchable history drawer (Ant) | `src/components/HistoryDrawer.tsx` |
 | Model picker (Ant Select over OpenRouter catalog) | `src/components/ModelPicker.tsx` |
-| **Agent loop barrel** (OpenRouter SDK; HITL forms; queue/repair; tool reliability) | `src/agent/runner.ts` → `mcp-tools.ts`, `turns.ts`, `state-display.ts`, `telemetry.ts`, `turn-repair.ts` |
+| **Agent loop barrel** (OpenRouter SDK; HITL + approval resume; tool reliability) | `src/agent/runner.ts` → `build-tools.ts`, `mcp-tools.ts`, `code-tools.ts`, `turns.ts`, `state-display.ts`, … |
+| **Tool assembly** (policy filter, collision, unique names → `callModel`) | `src/agent/build-tools.ts`, `tool-policy.ts`, `tool-names.ts` |
+| **Tool registry sync** (upsert discovered tools, active-only panel list) | `src/lib/tool-registry.ts`, `src/lib/db.ts` (`tool_registry`) |
+| Tools rail (enable/disable UI) | `src/components/panels/ToolsPanel.tsx` |
 | Model catalog fetch | `src/agent/models.ts` |
 | JSON Schema → Zod (for SDK `tool()` inputSchema) | `src/agent/json-schema-to-zod.ts` |
 | **Interactive-forms DSL** (field union, `when`, validators, Zod schema) | `packages/forms-dsl/` |
@@ -209,15 +287,19 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 | Cross-origin sandbox proxy server (per-request CSP) | `sandbox-server.ts` |
 | Rust entrypoint (Wayland fix, plugins, DB init, commands) | `src-tauri/src/lib.rs` |
 | Rust libSQL data layer (`db_execute`/`db_select`) | `src-tauri/src/db.rs` |
+| Rust scoped filesystem (list/read; write/run next) | `src-tauri/src/fs.rs` |
 | Tauri config / capabilities | `src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json` |
+| Frontend fs invoke wrappers | `src/lib/fs.ts` |
 
 DB file at runtime: `~/.local/share/com.drury.omni-desktop/omni.db`
 (tables: `settings`, `mcp_servers`, `tabs`, `conversations`, `messages` (legacy),
-`conversation_state` (SDK state per chat), `form_events`, `events` (timeline)).
+`conversation_state` (SDK state per chat), `form_events`, `events` (timeline),
+`tool_registry` (enable/disable policy per tool)).
 
 **Debugging without a human in the loop:** a dev-only HTTP bridge on
 `127.0.0.1:1456` lets an agent drive and inspect the running app — connect,
 `/newchat`, `/send`, `/openform` (deterministic form, forced tool call),
+`/approve` / `/reject` (SDK tool approval), `/submit` / `/cancel` (HITL form),
 `/forminput`/`/formclick` (drive the cross-origin form), `/type`/`/press`/`/click`
 (host input), `/dom`/`/formdom` (computed layout), `/state`, `/events`
 (source-attributed timeline), `/snapshot`. See the **`omni-debug-bridge` skill**.
@@ -405,6 +487,9 @@ The chat→coding workspace is being built in phases (Stitch renders in
 
 ## Backlog
 
+- **Code mode phase 2 — `write_file` / `run_command`** — **active next task**
+  (see ▶ NEXT TASKS). Rust + `CODE_TOOL_DEFINITIONS` + `buildCodeTools`; registry
+  sync is automatic. Optional: `ask` / `yolo` toggle in UI.
 - **Remaining antd cleanup.** Most shell debt is now migrated (`TabBar` uses
   antd `Tabs`, `SideRail` uses `Menu`, `SettingsPanel` uses `Form`, app buttons
   use `Button`). Remaining raw controls are mainly the queued-message remove
@@ -414,11 +499,6 @@ The chat→coding workspace is being built in phases (Stitch renders in
   up top); deltas arrive in bursts, so the bubble grows in chunks rather than
   per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
   reduce time-to-first-token with a snappier model. Not a bug.
-- **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md`: scoped
-  Rust `list_dir` / `read_file` and the tool registry are done. Next:
-  `write_file` / `run_command` using the permission-mode architecture in
-  `CODE_TOOLS_SDK_NOTES.md`: SDK `requireApproval` by default, optional yolo
-  mode that skips approval only, never Rust scoping/logging.
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference
   the earlier result) — built + headless-verified, not yet eyeballed live.
 - Productize workspace basics: conversation rename, retry/regenerate, MCP server
