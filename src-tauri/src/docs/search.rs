@@ -37,6 +37,40 @@ pub struct DocPage {
     pub content: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocChunkHit {
+    pub id: i64,
+    pub page_id: i64,
+    pub mirror: String,
+    pub layer: String,
+    pub category: String,
+    pub slug: String,
+    pub rel_path: String,
+    pub title: Option<String>,
+    pub heading: String,
+    pub heading_level: i64,
+    pub excerpt: String,
+    pub byte_size: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocChunk {
+    pub id: i64,
+    pub page_id: i64,
+    pub mirror: String,
+    pub layer: String,
+    pub category: String,
+    pub slug: String,
+    pub rel_path: String,
+    pub title: Option<String>,
+    pub heading: String,
+    pub heading_level: i64,
+    pub byte_size: i64,
+    pub content: String,
+}
+
 pub async fn search(
     db: &Db,
     query: &str,
@@ -121,6 +155,104 @@ pub async fn search(
     .map_err(|e| e.to_string())?;
 
     collect_hits(&mut rows).await
+}
+
+pub async fn search_chunks(
+    db: &Db,
+    query: &str,
+    mirror: Option<&str>,
+    layer: Option<&str>,
+    category_prefix: Option<&str>,
+    limit: u32,
+) -> Result<Vec<DocChunkHit>, String> {
+    let fts = build_fts_query(query);
+    if fts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let lim = limit as i64;
+    let conn = db.conn.clone();
+
+    let mut rows = match (mirror, layer, category_prefix) {
+        (Some(m), Some(l), Some(c)) => {
+            let like = format!("{c}/%");
+            conn.query(
+                "SELECT c.id, c.page_id, p.mirror, p.layer, p.category, p.slug, p.rel_path, \
+                 p.title, c.heading, c.heading_level, c.byte_size, \
+                 snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
+                 FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
+                 JOIN doc_pages p ON p.id = c.page_id \
+                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? AND p.layer = ? \
+                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank LIMIT ?",
+                libsql::params![fts, m, l, c, like, lim],
+            )
+            .await
+        }
+        (Some(m), Some(l), None) => {
+            conn.query(
+                "SELECT c.id, c.page_id, p.mirror, p.layer, p.category, p.slug, p.rel_path, \
+                 p.title, c.heading, c.heading_level, c.byte_size, \
+                 snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
+                 FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
+                 JOIN doc_pages p ON p.id = c.page_id \
+                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? AND p.layer = ? ORDER BY rank LIMIT ?",
+                libsql::params![fts, m, l, lim],
+            )
+            .await
+        }
+        (Some(m), None, Some(c)) => {
+            let like = format!("{c}/%");
+            conn.query(
+                "SELECT c.id, c.page_id, p.mirror, p.layer, p.category, p.slug, p.rel_path, \
+                 p.title, c.heading, c.heading_level, c.byte_size, \
+                 snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
+                 FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
+                 JOIN doc_pages p ON p.id = c.page_id \
+                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? \
+                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank LIMIT ?",
+                libsql::params![fts, m, c, like, lim],
+            )
+            .await
+        }
+        (Some(m), None, None) => {
+            conn.query(
+                "SELECT c.id, c.page_id, p.mirror, p.layer, p.category, p.slug, p.rel_path, \
+                 p.title, c.heading, c.heading_level, c.byte_size, \
+                 snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
+                 FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
+                 JOIN doc_pages p ON p.id = c.page_id \
+                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? ORDER BY rank LIMIT ?",
+                libsql::params![fts, m, lim],
+            )
+            .await
+        }
+        (None, Some(l), None) => {
+            conn.query(
+                "SELECT c.id, c.page_id, p.mirror, p.layer, p.category, p.slug, p.rel_path, \
+                 p.title, c.heading, c.heading_level, c.byte_size, \
+                 snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
+                 FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
+                 JOIN doc_pages p ON p.id = c.page_id \
+                 WHERE doc_chunks_fts MATCH ? AND p.layer = ? ORDER BY rank LIMIT ?",
+                libsql::params![fts, l, lim],
+            )
+            .await
+        }
+        _ => {
+            conn.query(
+                "SELECT c.id, c.page_id, p.mirror, p.layer, p.category, p.slug, p.rel_path, \
+                 p.title, c.heading, c.heading_level, c.byte_size, \
+                 snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
+                 FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
+                 JOIN doc_pages p ON p.id = c.page_id \
+                 WHERE doc_chunks_fts MATCH ? ORDER BY rank LIMIT ?",
+                libsql::params![fts, lim],
+            )
+            .await
+        }
+    }
+    .map_err(|e| e.to_string())?;
+
+    collect_chunk_hits(&mut rows).await
 }
 
 pub async fn list_pages(
@@ -356,6 +488,37 @@ async fn list_strings(
     Ok(out)
 }
 
+pub async fn open_chunk(db: &Db, id: i64) -> Result<Option<DocChunk>, String> {
+    let conn = db.conn.clone();
+    let mut rows = conn
+        .query(
+            "SELECT c.id, c.page_id, p.mirror, p.layer, p.category, p.slug, p.rel_path, \
+             p.title, c.heading, c.heading_level, c.byte_size, c.content \
+             FROM doc_chunks c JOIN doc_pages p ON p.id = c.page_id WHERE c.id = ?",
+            libsql::params![id],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let Some(row) = rows.next().await.map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+
+    Ok(Some(DocChunk {
+        id: row.get(0).map_err(|e| e.to_string())?,
+        page_id: row.get(1).map_err(|e| e.to_string())?,
+        mirror: row.get(2).map_err(|e| e.to_string())?,
+        layer: row.get(3).map_err(|e| e.to_string())?,
+        category: row.get(4).map_err(|e| e.to_string())?,
+        slug: row.get(5).map_err(|e| e.to_string())?,
+        rel_path: row.get(6).map_err(|e| e.to_string())?,
+        title: row.get(7).ok(),
+        heading: row.get(8).map_err(|e| e.to_string())?,
+        heading_level: row.get(9).map_err(|e| e.to_string())?,
+        byte_size: row.get(10).map_err(|e| e.to_string())?,
+        content: row.get(11).map_err(|e| e.to_string())?,
+    }))
+}
+
 async fn collect_meta(rows: &mut libsql::Rows) -> Result<Vec<DocMeta>, String> {
     let mut out = Vec::new();
     while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
@@ -368,6 +531,27 @@ async fn collect_meta(rows: &mut libsql::Rows) -> Result<Vec<DocMeta>, String> {
             title: row.get(5).ok(),
             rel_path: row.get(6).map_err(|e| e.to_string())?,
             bytes: row.get(7).map_err(|e| e.to_string())?,
+        });
+    }
+    Ok(out)
+}
+
+async fn collect_chunk_hits(rows: &mut libsql::Rows) -> Result<Vec<DocChunkHit>, String> {
+    let mut out = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+        out.push(DocChunkHit {
+            id: row.get(0).map_err(|e| e.to_string())?,
+            page_id: row.get(1).map_err(|e| e.to_string())?,
+            mirror: row.get(2).map_err(|e| e.to_string())?,
+            layer: row.get(3).map_err(|e| e.to_string())?,
+            category: row.get(4).map_err(|e| e.to_string())?,
+            slug: row.get(5).map_err(|e| e.to_string())?,
+            rel_path: row.get(6).map_err(|e| e.to_string())?,
+            title: row.get(7).ok(),
+            heading: row.get(8).map_err(|e| e.to_string())?,
+            heading_level: row.get(9).map_err(|e| e.to_string())?,
+            byte_size: row.get(10).map_err(|e| e.to_string())?,
+            excerpt: row.get(11).map_err(|e| e.to_string())?,
         });
     }
     Ok(out)

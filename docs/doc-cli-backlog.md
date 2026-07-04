@@ -20,11 +20,11 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
   - Optional `--mirror` filter; pipe-friendly for agent context maps.
   - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:index --compact | node -e ...`; `pnpm docs:index --compact --mirror ag-ui-protocol | node -e ...`.
 
-- [ ] **3. Heading-level chunks**
+- [x] **3. Heading-level chunks**
   - Ingest splits `##` / `###` sections into `doc_chunks` (+ FTS).
   - Commands: `search --chunks`, `open-chunk <id>`.
   - Biggest token win on large MDX (e.g. `official/concepts/events.mdx`).
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:ingest`; `pnpm docs:search --chunks --mirror ag-ui-protocol events | node -e ...`; `pnpm docs:search --chunks --json --mirror ag-ui-protocol events | node -e ...`; `pnpm docs:open-chunk -- <id> | node -e ...`.
 
 - [ ] **4. `resolve <topic>`**
   - Fuzzy single-best-doc lookup (path + title + slug), prints one hit or top 3.

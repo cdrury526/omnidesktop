@@ -4,8 +4,8 @@
 use clap::{Parser, Subcommand};
 use omni_desktop_lib::db;
 use omni_desktop_lib::docs::{
-    ingest_mirror, ingest_root, list_categories, list_layers, list_mirrors, list_pages, open_page,
-    open_page_json, search, stats, IngestReport,
+    ingest_mirror, ingest_root, list_categories, list_layers, list_mirrors, list_pages, open_chunk,
+    open_page, open_page_json, search, search_chunks, stats, IngestReport,
 };
 use std::path::PathBuf;
 
@@ -48,7 +48,12 @@ enum Command {
         /// Emit JSON array of hits
         #[arg(long)]
         json: bool,
+        /// Search heading-level chunks instead of full pages
+        #[arg(long)]
+        chunks: bool,
     },
+    /// Print chunk content by chunk row id
+    OpenChunk { id: i64 },
     /// Print full document content by row id
     Open {
         id: i64,
@@ -113,7 +118,53 @@ async fn main() -> Result<(), String> {
             limit,
             paths,
             json,
+            chunks,
         } => {
+            if chunks {
+                let hits = search_chunks(
+                    &database,
+                    &query,
+                    mirror.as_deref(),
+                    layer.as_deref(),
+                    category.as_deref(),
+                    limit,
+                )
+                .await?;
+                if json {
+                    print_json(&hits)?;
+                    return Ok(());
+                }
+                if hits.is_empty() {
+                    println!("(no matches)");
+                    return Ok(());
+                }
+                for h in hits {
+                    if paths {
+                        println!("{}:{}", h.mirror, h.rel_path);
+                    } else {
+                        let title = h.title.as_deref().unwrap_or(&h.slug);
+                        let location = if h.category.is_empty() {
+                            format!("{} / {}", h.mirror, h.layer)
+                        } else {
+                            format!("{} / {} / {}", h.mirror, h.layer, h.category)
+                        };
+                        println!(
+                            "[chunk:{} page:{}] {} > {}  {}  ({}b)\n  {}\n  → {}/{}\n",
+                            h.id,
+                            h.page_id,
+                            title,
+                            h.heading,
+                            location,
+                            h.byte_size,
+                            h.excerpt,
+                            h.mirror,
+                            h.rel_path
+                        );
+                    }
+                }
+                return Ok(());
+            }
+
             let hits = search(
                 &database,
                 &query,
@@ -147,6 +198,18 @@ async fn main() -> Result<(), String> {
                     );
                 }
             }
+        }
+        Command::OpenChunk { id } => {
+            let Some(chunk) = open_chunk(&database, id).await? else {
+                return Err(format!("no chunk with id {id}"));
+            };
+            println!(
+                "// {}/{}#{}\n",
+                chunk.mirror,
+                chunk.rel_path,
+                slugify_heading(&chunk.heading)
+            );
+            print!("{}", chunk.content);
         }
         Command::Open { id, path, json } => {
             if json {
@@ -269,4 +332,19 @@ fn compact_field(value: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .replace('|', "/")
+}
+
+fn slugify_heading(value: &str) -> String {
+    let mut out = String::new();
+    let mut last_dash = false;
+    for ch in value.chars().flat_map(|c| c.to_lowercase()) {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch);
+            last_dash = false;
+        } else if !last_dash {
+            out.push('-');
+            last_dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
 }

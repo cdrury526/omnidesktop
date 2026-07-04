@@ -129,7 +129,7 @@ pub async fn ingest_mirror(db: &Db, mirror_root: &Path) -> Result<IngestReport, 
         let title = extract_title(&content, &slug_name);
         let source_url = url_map.get(&rel).cloned();
 
-        insert_page(
+        let page_id = insert_page(
             db,
             source_id,
             &slug,
@@ -145,6 +145,9 @@ pub async fn ingest_mirror(db: &Db, mirror_root: &Path) -> Result<IngestReport, 
             byte_size,
         )
         .await?;
+        if should_chunk(&format) {
+            insert_chunks(db, page_id, &content, &title).await?;
+        }
         report.inserted += 1;
     }
 
@@ -173,6 +176,10 @@ fn extension_format(file_name: &str) -> String {
         .and_then(|e| e.to_str())
         .unwrap_or("txt")
         .to_string()
+}
+
+fn should_chunk(format: &str) -> bool {
+    matches!(format, "md" | "mdx")
 }
 
 fn hash_content(content: &str) -> String {
@@ -283,6 +290,12 @@ async fn upsert_source(db: &Db, slug: &str, root: &Path, prov: &Provenance) -> R
 async fn wipe_pages_for_source(db: &Db, source_id: i64) -> Result<(), String> {
     let conn = db.conn.clone();
     conn.execute(
+        "DELETE FROM doc_chunks WHERE page_id IN (SELECT id FROM doc_pages WHERE source_id = ?)",
+        libsql::params![source_id],
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    conn.execute(
         "DELETE FROM doc_pages WHERE source_id = ?",
         libsql::params![source_id],
     )
@@ -305,7 +318,7 @@ async fn insert_page(
     content: &str,
     content_hash: &str,
     byte_size: i64,
-) -> Result<(), String> {
+) -> Result<i64, String> {
     let conn = db.conn.clone();
     conn.execute(
         "INSERT INTO doc_pages(source_id, mirror, layer, category, slug, rel_path, title, format, \
@@ -328,5 +341,115 @@ async fn insert_page(
     )
     .await
     .map_err(|e| e.to_string())?;
+
+    let mut rows = conn
+        .query(
+            "SELECT id FROM doc_pages WHERE source_id = ? AND rel_path = ?",
+            libsql::params![source_id, rel_path],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let row = rows.next().await.map_err(|e| e.to_string())?;
+    row.and_then(|r| r.get::<i64>(0).ok())
+        .ok_or_else(|| format!("page id missing for {rel_path}"))
+}
+
+async fn insert_chunks(
+    db: &Db,
+    page_id: i64,
+    content: &str,
+    fallback_heading: &str,
+) -> Result<(), String> {
+    let chunks = split_heading_chunks(content, fallback_heading);
+    let conn = db.conn.clone();
+    for (idx, chunk) in chunks.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO doc_chunks(page_id, chunk_index, heading_level, heading, content, byte_size) \
+             VALUES(?, ?, ?, ?, ?, ?)",
+            libsql::params![
+                page_id,
+                idx as i64,
+                chunk.heading_level as i64,
+                chunk.heading.as_str(),
+                chunk.content.as_str(),
+                chunk.content.len() as i64,
+            ],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct HeadingChunk {
+    heading_level: u8,
+    heading: String,
+    content: String,
+}
+
+fn split_heading_chunks(content: &str, fallback_heading: &str) -> Vec<HeadingChunk> {
+    let mut chunks = Vec::new();
+    let mut current_heading: Option<(u8, String)> = None;
+    let mut current_lines: Vec<&str> = Vec::new();
+
+    for line in content.lines() {
+        if let Some((level, heading)) = parse_chunk_heading(line) {
+            if let Some((heading_level, heading_text)) = current_heading.take() {
+                push_chunk(&mut chunks, heading_level, heading_text, &current_lines);
+                current_lines.clear();
+            }
+            current_heading = Some((level, heading));
+        }
+
+        if current_heading.is_some() {
+            current_lines.push(line);
+        }
+    }
+
+    if let Some((heading_level, heading_text)) = current_heading {
+        push_chunk(&mut chunks, heading_level, heading_text, &current_lines);
+    }
+
+    if chunks.is_empty() {
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            chunks.push(HeadingChunk {
+                heading_level: 1,
+                heading: fallback_heading.to_string(),
+                content: trimmed.to_string(),
+            });
+        }
+    }
+
+    chunks
+}
+
+fn parse_chunk_heading(line: &str) -> Option<(u8, String)> {
+    let trimmed = line.trim_start();
+    let hashes = trimmed.chars().take_while(|c| *c == '#').count();
+    if !(2..=3).contains(&hashes) {
+        return None;
+    }
+    let rest = trimmed.get(hashes..)?;
+    if !rest.starts_with(' ') {
+        return None;
+    }
+    let heading = rest.trim().trim_matches('#').trim();
+    if heading.is_empty() {
+        return None;
+    }
+    Some((hashes as u8, heading.to_string()))
+}
+
+fn push_chunk(chunks: &mut Vec<HeadingChunk>, heading_level: u8, heading: String, lines: &[&str]) {
+    let content = lines.join("\n").trim().to_string();
+    if content.is_empty() {
+        return;
+    }
+    chunks.push(HeadingChunk {
+        heading_level,
+        heading,
+        content,
+    });
 }

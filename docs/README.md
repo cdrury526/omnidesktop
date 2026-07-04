@@ -43,6 +43,7 @@ pnpm docs:search -- stopWhen
 pnpm docs:search --mirror openrouter-agent-sdk --layer published call-model
 pnpm docs:search --paths ag-ui events
 pnpm docs:search --json stopWhen
+pnpm docs:search --chunks --mirror ag-ui-protocol events
 
 # Browse taxonomy
 pnpm docs:list
@@ -56,6 +57,7 @@ pnpm docs:index --compact --mirror ag-ui-protocol
 # Full content by hit id
 pnpm docs:open -- 42
 pnpm docs:open --json 42
+pnpm docs:open-chunk -- 7
 
 # Stats
 cargo run --manifest-path src-tauri/Cargo.toml --bin omni-docs -- stats
