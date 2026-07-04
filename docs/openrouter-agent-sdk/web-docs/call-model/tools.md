@@ -1,0 +1,979 @@
+> ## Documentation Index
+>
+> Fetch the complete documentation index at: [/docs/llms.txt](https://openrouter.ai/docs/llms.txt)
+>
+> Use this file to discover all available pages before exploring further.
+
+[Skip to main content](https://openrouter.ai/docs/agent-sdk/call-model/tools#content-area)
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#the-tool-helper)  The tool() Helper
+
+The `tool()` function creates type-safe tools with Zod schema validation:
+
+```
+import { OpenRouter, tool } from '@openrouter/agent';
+import { z } from 'zod';
+
+const weatherTool = tool({
+  name: 'get_weather',
+  description: 'Get the current weather for a location',
+  inputSchema: z.object({
+    location: z.string().describe('City name, e.g., "San Francisco, CA"'),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async (params) => {
+    // params is typed as { location: string }
+    const weather = await fetchWeather(params.location);
+    return {
+      temperature: weather.temp,
+      conditions: weather.description,
+    };
+  },
+});
+```
+
+See all 22 lines
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#tool-types)  Tool Types
+
+The SDK supports four types of tools, automatically detected from your configuration:
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#regular-tools)  Regular Tools
+
+Standard tools with an execute function:
+
+```
+const calculatorTool = tool({
+  name: 'calculate',
+  description: 'Perform a mathematical calculation',
+  inputSchema: z.object({
+    expression: z.string().describe('Math expression like "2 + 2"'),
+  }),
+  outputSchema: z.object({
+    result: z.number(),
+  }),
+  execute: async (params) => {
+    const result = eval(params.expression); // Use a safer eval in production
+    return { result };
+  },
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#generator-tools)  Generator Tools
+
+Tools that yield progress updates during execution. Add `eventSchema` to enable generator mode:
+
+```
+const searchTool = tool({
+  name: 'search_database',
+  description: 'Search documents with progress updates',
+  inputSchema: z.object({
+    query: z.string(),
+    limit: z.number().default(10),
+  }),
+  // eventSchema triggers generator mode
+  eventSchema: z.object({
+    progress: z.number().min(0).max(100),
+    message: z.string(),
+  }),
+  outputSchema: z.object({
+    results: z.array(z.string()),
+    totalFound: z.number(),
+  }),
+  // execute is now an async generator
+  execute: async function* (params) {
+    yield { progress: 0, message: 'Starting search...' };
+
+    const results = [];
+    for (let i = 0; i < 5; i++) {
+      yield { progress: (i + 1) * 20, message: `Searching batch ${i + 1}...` };
+      results.push(...await searchBatch(params.query, i));
+    }
+
+    // Final yield is the output
+    yield { progress: 100, message: 'Complete!' };
+
+    // Return the final result (or yield it as last value)
+    return {
+      results: results.slice(0, params.limit),
+      totalFound: results.length,
+    };
+  },
+});
+```
+
+See all 36 lines
+
+Progress events are streamed to consumers via `getToolStream()` and `getFullResponsesStream()`.
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#manual-tools)  Manual Tools
+
+Tools without automatic execution - you handle the tool calls yourself:
+
+```
+const manualTool = tool({
+  name: 'send_email',
+  description: 'Send an email (requires user confirmation)',
+  inputSchema: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  execute: false, // Manual handling required
+});
+```
+
+Use `getToolCalls()` to retrieve manual tool calls for processing.
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#human-in-the-loop-hitl-tools)  Human-in-the-Loop (HITL) Tools
+
+HITL tools extend manual-tool semantics with two sync-or-async hooks that let you decide per call whether to respond programmatically or pause for a human:
+
+- `onToolCalled` — fires when the model invokes the tool. Return a value to feed the model directly (like a regular `execute`), or return `null` to pause the loop like a manual tool. The caller resumes later by supplying a `function_call_output` item.
+- `onResponseReceived` — optional. Fires on a later turn when an incoming `function_call_output` matches a prior call of this tool (by `callId → function_call.name`). It receives the caller-supplied raw result and returns the value sent to the model. Throwing surfaces as a tool error to the model.
+
+An `outputSchema` is required for HITL tools — it validates both the `onToolCalled` return value (when non-null) and the value delivered via `function_call_output` (whether transformed by `onResponseReceived` or passed through directly).
+
+```
+const approvePaymentTool = tool({
+  name: 'approve_payment',
+  description: 'Approve a payment, escalating large amounts to a human',
+  inputSchema: z.object({
+    amount: z.number(),
+    recipient: z.string(),
+  }),
+  outputSchema: z.object({
+    ok: z.boolean(),
+    reviewedAt: z.number().optional(),
+  }),
+  onToolCalled: async (input) => {
+    // Auto-approve small amounts
+    if (input.amount < 100) {
+      return { ok: true };
+    }
+    // Escalate to a human — pauses the loop
+    return null;
+  },
+  onResponseReceived: async (raw) => {
+    // Post-process the caller-supplied result before the model sees it
+    return { ...(raw as object), reviewedAt: Date.now() };
+  },
+});
+```
+
+See all 24 lines
+
+When `onToolCalled` returns `null`, the conversation state moves to `status: 'awaiting_hitl'` and the paused call surfaces via `getToolCalls()` / `getPendingToolCalls()`. Resume by calling `callModel` again with a `function_call_output` item for each paused call in the input.
+
+HITL tools differ from `requireApproval`: approval gates pause _before_ execution for a yes/no decision, while HITL tools let `onToolCalled` run arbitrary logic first and only pause when it returns `null`. Use HITL when the decision is data-driven (e.g., amount thresholds, risk scoring); use `requireApproval` when you always want explicit human consent. See [Tool Approval & State](https://openrouter.ai/docs/agent-sdk/call-model/tool-approval-state).
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#schema-definition)  Schema Definition
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#input-schema)  Input Schema
+
+Define what parameters the tool accepts:
+
+```
+const inputSchema = z.object({
+  // Required parameters
+  query: z.string().describe('Search query'),
+
+  // Optional with default
+  limit: z.number().default(10).describe('Max results'),
+
+  // Optional without default
+  filter: z.string().optional().describe('Filter expression'),
+
+  // Enum values
+  sortBy: z.enum(['relevance', 'date', 'popularity']).default('relevance'),
+
+  // Nested objects
+  options: z.object({
+    caseSensitive: z.boolean().default(false),
+    wholeWord: z.boolean().default(false),
+  }).optional(),
+
+  // Arrays
+  tags: z.array(z.string()).optional(),
+});
+```
+
+See all 22 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#output-schema)  Output Schema
+
+Define the structure of results returned to the model:
+
+```
+const outputSchema = z.object({
+  results: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    score: z.number(),
+  })),
+  metadata: z.object({
+    totalCount: z.number(),
+    searchTimeMs: z.number(),
+  }),
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#event-schema-generator-tools)  Event Schema (Generator Tools)
+
+Define progress/status events for generator tools:
+
+```
+const eventSchema = z.object({
+  stage: z.enum(['initializing', 'processing', 'finalizing']),
+  progress: z.number(),
+  currentItem: z.string().optional(),
+});
+```
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#type-inference)  Type Inference
+
+The SDK provides utilities to extract types from tools:
+
+```
+import type { InferToolInput, InferToolOutput, InferToolEvent } from '@openrouter/agent';
+
+// Get the input type
+type WeatherInput = InferToolInput<typeof weatherTool>;
+// { location: string }
+
+// Get the output type
+type WeatherOutput = InferToolOutput<typeof weatherTool>;
+// { temperature: number; conditions: string }
+
+// Get event type (generator tools only)
+type SearchEvent = InferToolEvent<typeof searchTool>;
+// { progress: number; message: string }
+```
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#using-tools-with-callmodel)  Using Tools with callModel
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#single-tool)  Single Tool
+
+```
+const openrouter = new OpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'What is the weather in Tokyo?',
+  tools: [weatherTool],
+});
+
+// Tools are automatically executed
+const text = await result.getText();
+// "The weather in Tokyo is 22°C and sunny."
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#multiple-tools)  Multiple Tools
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Search for TypeScript tutorials and calculate 2+2',
+  tools: [searchTool, calculatorTool],
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#type-safe-tool-calls-with-as-const)  Type-Safe Tool Calls with `as const`
+
+Use `as const` for full type inference on tool calls:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'What is the weather?',
+  tools: [weatherTool, searchTool] as const,
+  maxToolRounds: 0, // Get tool calls without executing
+});
+
+// Tool calls are typed as union of tool inputs
+for await (const toolCall of result.getToolCallsStream()) {
+  if (toolCall.name === 'get_weather') {
+    // toolCall.arguments is typed as { location: string }
+    console.log('Weather for:', toolCall.arguments.location);
+  }
+}
+```
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#execute-context)  Execute Context
+
+Tool execute functions receive a flat context object as
+their second argument. It merges `TurnContext` fields
+with a `tools` map and a `setContext()` method:
+
+```
+const contextAwareTool = tool({
+  name: 'context_tool',
+  inputSchema: z.object({ data: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async (params, context) => {
+    // TurnContext fields are available directly
+    console.log('Turn:', context.numberOfTurns);
+    console.log('History:', context.turnRequest?.input);
+    console.log('Model:', context.turnRequest?.model);
+
+    return {
+      result: `Processed on turn ${context.numberOfTurns}`,
+    };
+  },
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#context-properties)  Context Properties
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `numberOfTurns` | `number` | Current turn number (1-indexed) |
+| `turnRequest` | `OpenResponsesRequest | undefined` | Current request object |
+| `toolCall` | `OpenResponsesFunctionToolCall | undefined` | The tool call being executed |
+| `local` | `Readonly<TContext>` | This tool’s own context (read-only) |
+| `setContext` | `(partial: Partial<TContext>) => void` | Mutate this tool’s context |
+| `shared` | `Readonly<TShared>` | Shared context visible to all tools |
+| `setSharedContext` | `(partial: Partial<TShared>) => void` | Mutate shared context |
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#tool-context)  Tool Context
+
+Tools can declare a `contextSchema` to receive typed,
+persistent context data from the caller. Context is
+keyed by tool name and persists across turns.
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#declaring-contextschema)  Declaring contextSchema
+
+```
+const weatherTool = tool({
+  name: 'get_weather',
+  description: 'Get weather for a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+  }),
+  // Declare what context this tool needs
+  contextSchema: z.object({
+    apiKey: z.string(),
+    units: z.enum(['celsius', 'fahrenheit']),
+  }),
+  execute: async (params, context) => {
+    // Access this tool's own context via local
+    const { apiKey, units } = context.local;
+
+    const weather = await fetchWeather(
+      params.location,
+      apiKey,
+      units,
+    );
+    return { temperature: weather.temp };
+  },
+});
+```
+
+See all 26 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#providing-context-in-callmodel)  Providing Context in callModel
+
+Pass context keyed by tool name:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'What is the weather in Tokyo?',
+  tools: [weatherTool, dbTool] as const,
+
+  // Static context — keyed by tool name
+  context: {
+    get_weather: { apiKey: 'sk-...', units: 'celsius' },
+    db_query: { connectionString: 'postgres://...' },
+  },
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#dynamic-context)  Dynamic Context
+
+Use an async function for one-time initialization
+that needs to fetch data:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'What is the weather?',
+  tools: [weatherTool] as const,
+
+  // Resolved once at turn 0 to seed the store
+  context: async () => ({
+    get_weather: {
+      apiKey: await fetchApiKey(),
+      units: 'celsius',
+    },
+  }),
+});
+```
+
+`resolveContext` runs once at turn 0 to seed the
+context store. For per-turn mutations, use
+`setContext()` inside your tool’s `execute` function.
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#mutating-context-with-setcontext)  Mutating Context with setContext
+
+Tools can update their own context using `setContext()`.
+Changes persist across turns via the shared store and
+are visible immediately — `context.local` is a live
+getter that always reads the latest values:
+
+```
+const authTool = tool({
+  name: 'auth',
+  inputSchema: z.object({ action: z.string() }),
+  contextSchema: z.object({
+    token: z.string(),
+    refreshCount: z.number(),
+  }),
+  execute: async (params, context) => {
+    const { token } = context.local;
+
+    if (isExpired(token)) {
+      const newToken = await refreshToken(token);
+      // Mutate own context — persists to next turn
+      context.setContext({
+        token: newToken,
+        refreshCount:
+          context.local.refreshCount + 1,
+      });
+    }
+
+    return { success: true };
+  },
+});
+```
+
+See all 23 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#observing-context-changes)  Observing Context Changes
+
+Use `getContextUpdates()` on `ModelResult` to observe
+context mutations in real time:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Authenticate and fetch data',
+  tools: [authTool] as const,
+  context: {
+    auth: { token: 'initial', refreshCount: 0 },
+  },
+});
+
+for await (const snapshot of result.getContextUpdates()) {
+  console.log('Context changed:', snapshot);
+  // { auth: { token: 'new-token', refreshCount: 1 } }
+}
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#shared-context)  Shared Context
+
+Use `sharedSchema` on `tool()` and `sharedContextSchema`
+on `callModel` to share typed state across tools:
+
+```
+const SharedContextSchema = z.object({
+  _sessionId: z.string().optional(),
+});
+
+const execTool = tool({
+  name: 'sandbox_exec',
+  inputSchema: z.object({ command: z.string() }),
+  sharedSchema: SharedContextSchema,
+  execute: async (input, ctx) => {
+    // Read shared state set by any tool
+    const sid = ctx.shared._sessionId;
+    const session = await connect(sid);
+    // Write shared state for other tools
+    ctx.setSharedContext({ _sessionId: session.id });
+    return await session.exec(input.command);
+  },
+});
+
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Run a command',
+  tools: [execTool] as const,
+  sharedContextSchema: SharedContextSchema,
+  context: {
+    shared: { _sessionId: 'existing-session' },
+    sandbox_exec: {},
+  },
+});
+```
+
+See all 28 lines
+
+`context.local` is scoped to one tool.
+`context.shared` is visible to all tools and persists
+across turns. Pass the same `sharedSchema` to each tool
+for typed access, and `sharedContextSchema` to
+`callModel` for runtime validation.
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#tool-execution)  Tool Execution
+
+callModel automatically executes tools and handles multi-turn conversations. When the model calls a tool, the SDK executes it, sends the result back, and continues until the model provides a final response.
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#automatic-execution-flow)  Automatic Execution Flow
+
+When you provide tools with execute functions:
+
+```
+import { OpenRouter, tool } from '@openrouter/agent';
+import { z } from 'zod';
+
+const weatherTool = tool({
+  name: 'get_weather',
+  inputSchema: z.object({ location: z.string() }),
+  outputSchema: z.object({ temperature: z.number() }),
+  execute: async ({ location }) => {
+    return { temperature: await fetchTemperature(location) };
+  },
+});
+
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'What is the weather in Paris?',
+  tools: [weatherTool],
+});
+
+// getText() waits for all tool execution to complete
+const text = await result.getText();
+// "The weather in Paris is 18°C."
+```
+
+See all 21 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#execution-sequence)  Execution Sequence
+
+1. Model receives prompt and generates tool call
+2. SDK extracts tool call and validates arguments
+3. Tool’s execute function runs
+4. Result is formatted and sent back to model
+5. Model generates final response (or more tool calls)
+6. Process repeats until model is done
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#controlling-execution-rounds)  Controlling Execution Rounds
+
+#### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#maxtoolrounds-number)  maxToolRounds (Number)
+
+Limit the maximum number of tool execution rounds:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Research this topic thoroughly',
+  tools: [searchTool, analyzeTool],
+  maxToolRounds: 3, // Stop after 3 rounds of tool execution
+});
+```
+
+Setting `maxToolRounds: 0` disables automatic execution - you get raw tool calls.
+
+#### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#maxtoolrounds-function)  maxToolRounds (Function)
+
+Use a function for dynamic control:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Research and analyze',
+  tools: [searchTool],
+  maxToolRounds: (context) => {
+    // Continue if under 5 turns
+    return context.numberOfTurns < 5;
+  },
+});
+```
+
+The function receives `TurnContext` and returns `true` to continue or `false` to stop.
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#accessing-tool-calls)  Accessing Tool Calls
+
+#### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#gettoolcalls)  getToolCalls()
+
+Get all tool calls from the initial response (before auto-execution):
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'What is the weather in Tokyo and Paris?',
+  tools: [weatherTool],
+  maxToolRounds: 0, // Don't auto-execute
+});
+
+const toolCalls = await result.getToolCalls();
+
+for (const call of toolCalls) {
+  console.log(`Tool: ${call.name}`);
+  console.log(`ID: ${call.id}`);
+  console.log(`Arguments:`, call.arguments);
+}
+```
+
+#### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#gettoolcallsstream)  getToolCallsStream()
+
+Stream tool calls as they complete:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Check weather in multiple cities',
+  tools: [weatherTool],
+  maxToolRounds: 0,
+});
+
+for await (const toolCall of result.getToolCallsStream()) {
+  console.log(`Received tool call: ${toolCall.name}`);
+
+  // Process each tool call as it arrives
+  const weatherResult = await processWeatherRequest(toolCall.arguments);
+  console.log('Result:', weatherResult);
+}
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#tool-stream-events)  Tool Stream Events
+
+#### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#gettoolstream)  getToolStream()
+
+Stream both argument deltas and preliminary results:
+
+```
+const searchTool = tool({
+  name: 'search',
+  inputSchema: z.object({ query: z.string() }),
+  eventSchema: z.object({ progress: z.number(), status: z.string() }),
+  outputSchema: z.object({ results: z.array(z.string()) }),
+  execute: async function* ({ query }) {
+    yield { progress: 25, status: 'Searching...' };
+    yield { progress: 50, status: 'Processing...' };
+    yield { progress: 75, status: 'Ranking...' };
+    yield { progress: 100, status: 'Complete' };
+    return { results: ['result1', 'result2'] };
+  },
+});
+
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Search for TypeScript tutorials',
+  tools: [searchTool],
+});
+
+for await (const event of result.getToolStream()) {
+  switch (event.type) {
+    case 'delta':
+      // Raw argument delta from the model
+      process.stdout.write(event.content);
+      break;
+    case 'preliminary_result':
+      // Progress from generator tool
+      console.log(`Progress: ${event.result.progress}% - ${event.result.status}`);
+      break;
+  }
+}
+```
+
+See all 32 lines
+
+#### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#event-types)  Event Types
+
+| Type | Description |
+| --- | --- |
+| `delta` | Raw tool call argument chunks from model |
+| `preliminary_result` | Progress events from generator tools (intermediate yields) |
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#tool-result-events)  Tool Result Events
+
+When using `getFullResponsesStream()`, you can also receive `tool.result` events that fire when a tool execution completes:
+
+```
+for await (const event of result.getFullResponsesStream()) {
+  switch (event.type) {
+    case 'tool.preliminary_result':
+      // Intermediate progress from generator tools
+      console.log(`Progress (${event.toolCallId}):`, event.result);
+      break;
+    case 'tool.result':
+      // Final result when tool execution completes
+      console.log(`Tool ${event.toolCallId} completed`);
+      console.log('Result:', event.result);
+      // Access any preliminary results that were emitted during execution
+      if (event.preliminaryResults) {
+        console.log('All progress events:', event.preliminaryResults);
+      }
+      break;
+  }
+}
+```
+
+#### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#toolresultevent-type)  ToolResultEvent Type
+
+```
+type ToolResultEvent<TResult = unknown, TPreliminaryResults = unknown> = {
+  type: 'tool.result';
+  toolCallId: string;
+  result: TResult;
+  timestamp: number;
+  preliminaryResults?: TPreliminaryResults[];
+};
+```
+
+The `tool.result` event provides the final output from tool execution along with all intermediate `preliminaryResults` that were yielded during execution (for generator tools). This is useful when you need both real-time progress updates and a summary of all progress at completion.
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#parallel-tool-execution)  Parallel Tool Execution
+
+When the model calls multiple tools, they execute in parallel:
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Get weather in Paris, Tokyo, and New York simultaneously',
+  tools: [weatherTool],
+});
+
+// All three weather calls execute in parallel
+const text = await result.getText();
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#manual-tool-handling)  Manual Tool Handling
+
+For tools without execute functions:
+
+```
+const confirmTool = tool({
+  name: 'send_email',
+  description: 'Send an email (requires confirmation)',
+  inputSchema: z.object({
+    to: z.string().email(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  execute: false, // Manual handling
+});
+
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Send an email to alice@example.com',
+  tools: [confirmTool],
+  maxToolRounds: 0,
+});
+
+const toolCalls = await result.getToolCalls();
+
+for (const call of toolCalls) {
+  if (call.name === 'send_email') {
+    // Show confirmation UI
+    const confirmed = await showConfirmDialog(call.arguments);
+
+    if (confirmed) {
+      await sendEmail(call.arguments);
+    }
+  }
+}
+```
+
+See all 30 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#execution-results)  Execution Results
+
+Access execution metadata through getResponse():
+
+```
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'What is 2+2 and the weather in Paris?',
+  tools: [calculatorTool, weatherTool],
+});
+
+const response = await result.getResponse();
+
+// Response includes all execution rounds
+console.log('Final output:', response.output);
+console.log('Usage:', response.usage);
+```
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#error-handling)  Error Handling
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#tool-execution-errors)  Tool Execution Errors
+
+Errors in execute functions are caught and sent back to the model:
+
+```
+const riskyTool = tool({
+  name: 'risky_operation',
+  inputSchema: z.object({ input: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async (params) => {
+    if (params.input === 'fail') {
+      throw new Error('Operation failed: invalid input');
+    }
+    return { result: 'success' };
+  },
+});
+
+const result = openrouter.callModel({
+  model: 'openai/gpt-5-nano',
+  input: 'Try the risky operation with "fail"',
+  tools: [riskyTool],
+});
+
+// Model receives error message and can respond appropriately
+const text = await result.getText();
+// "I tried the operation but it failed with: Operation failed: invalid input"
+```
+
+See all 21 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#validation-errors)  Validation Errors
+
+Invalid tool arguments are caught before execution:
+
+```
+const strictTool = tool({
+  name: 'strict',
+  inputSchema: z.object({
+    email: z.string().email(),
+    age: z.number().min(0).max(150),
+  }),
+  execute: async (params) => {
+    // Only runs with valid input
+    return { valid: true };
+  },
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#graceful-error-handling)  Graceful Error Handling
+
+Handle errors gracefully in execute functions:
+
+```
+const robustTool = tool({
+  name: 'fetch_data',
+  inputSchema: z.object({ url: z.string().url() }),
+  outputSchema: z.object({
+    data: z.unknown().optional(),
+    error: z.string().optional(),
+  }),
+  execute: async (params) => {
+    try {
+      const response = await fetch(params.url);
+      if (!response.ok) {
+        return { error: `HTTP ${response.status}: ${response.statusText}` };
+      }
+      return { data: await response.json() };
+    } catch (error) {
+      return { error: `Failed to fetch: ${error.message}` };
+    }
+  },
+});
+```
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#best-practices)  Best Practices
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#descriptive-names-and-descriptions)  Descriptive Names and Descriptions
+
+```
+// Good: Clear name and description
+const tool1 = tool({
+  name: 'search_knowledge_base',
+  description: 'Search the company knowledge base for documents, FAQs, and policies. Returns relevant articles with snippets.',
+  // ...
+});
+
+// Avoid: Vague or generic
+const tool2 = tool({
+  name: 'search',
+  description: 'Searches stuff',
+  // ...
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#schema-descriptions)  Schema Descriptions
+
+Add `.describe()` to help the model understand parameters:
+
+```
+const inputSchema = z.object({
+  query: z.string().describe('Natural language search query'),
+  maxResults: z.number()
+    .min(1)
+    .max(100)
+    .default(10)
+    .describe('Maximum number of results to return (1-100)'),
+  dateRange: z.enum(['day', 'week', 'month', 'year', 'all'])
+    .default('all')
+    .describe('Filter results by time period'),
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#idempotent-tools)  Idempotent Tools
+
+Design tools to be safely re-executable:
+
+```
+const createUserTool = tool({
+  name: 'create_user',
+  inputSchema: z.object({
+    email: z.string().email(),
+    name: z.string(),
+  }),
+  execute: async (params) => {
+    // Check if user exists first
+    const existing = await findUserByEmail(params.email);
+    if (existing) {
+      return { userId: existing.id, created: false };
+    }
+
+    const user = await createUser(params);
+    return { userId: user.id, created: true };
+  },
+});
+```
+
+### [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#timeout-handling)  Timeout Handling
+
+Wrap long-running operations:
+
+```
+const longRunningTool = tool({
+  name: 'process_data',
+  inputSchema: z.object({ dataId: z.string() }),
+  execute: async (params) => {
+    const timeoutMs = 30000;
+
+    const result = await Promise.race([\
+      processData(params.dataId),\
+      new Promise((_, reject) =>\
+        setTimeout(() => reject(new Error('Operation timed out')), timeoutMs)\
+      ),\
+    ]);
+
+    return result;
+  },
+});
+```
+
+## [​](https://openrouter.ai/docs/agent-sdk/call-model/tools\#next-steps)  Next Steps
+
+- **[Tool Approval & State](https://openrouter.ai/docs/agent-sdk/call-model/tool-approval-state)** \- Human-in-the-loop approval and conversation persistence
+- **[nextTurnParams](https://openrouter.ai/docs/agent-sdk/call-model/next-turn-params)** \- Tool-driven context injection
+- **[Stop Conditions](https://openrouter.ai/docs/agent-sdk/call-model/stop-conditions)** \- Advanced execution control
+- **[Examples](https://openrouter.ai/docs/agent-sdk/call-model/examples/weather-tool)** \- Complete tool implementations
+
+[Message Formats](https://openrouter.ai/docs/agent-sdk/call-model/message-formats) [Tool Approval & State Persistence](https://openrouter.ai/docs/agent-sdk/call-model/tool-approval-state)
+
+Ctrl+I
+
+Assistant
+
+Responses are generated using AI and may contain mistakes.

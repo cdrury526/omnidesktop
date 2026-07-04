@@ -1,0 +1,222 @@
+[
+  {
+    "url": "https://docs.ag-ui.com/agentic-protocols",
+    "path": "web-docs/https:/docs.ag-ui.com/agentic-protocols.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/agents",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/agents.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/architecture",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/architecture.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/capabilities",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/capabilities.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/events",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/events.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/generative-ui-specs",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/generative-ui-specs.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/interrupts",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/interrupts.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/messages",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/messages.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/middleware",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/middleware.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/reasoning",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/reasoning.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/serialization",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/serialization.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/state",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/state.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/concepts/tools",
+    "path": "web-docs/https:/docs.ag-ui.com/concepts/tools.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/development/contributing",
+    "path": "web-docs/https:/docs.ag-ui.com/development/contributing.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/development/roadmap",
+    "path": "web-docs/https:/docs.ag-ui.com/development/roadmap.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/development/updates",
+    "path": "web-docs/https:/docs.ag-ui.com/development/updates.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/drafts/generative-ui",
+    "path": "web-docs/https:/docs.ag-ui.com/drafts/generative-ui.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/drafts/meta-events",
+    "path": "web-docs/https:/docs.ag-ui.com/drafts/meta-events.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/drafts/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/drafts/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/introduction",
+    "path": "web-docs/https:/docs.ag-ui.com/introduction.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/quickstart/applications",
+    "path": "web-docs/https:/docs.ag-ui.com/quickstart/applications.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/quickstart/clients",
+    "path": "web-docs/https:/docs.ag-ui.com/quickstart/clients.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/quickstart/introduction",
+    "path": "web-docs/https:/docs.ag-ui.com/quickstart/introduction.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/quickstart/middleware",
+    "path": "web-docs/https:/docs.ag-ui.com/quickstart/middleware.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/quickstart/server",
+    "path": "web-docs/https:/docs.ag-ui.com/quickstart/server.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/abstractions/events",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/abstractions/events.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/abstractions/multimodal-inputs",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/abstractions/multimodal-inputs.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/abstractions/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/abstractions/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/abstractions/types",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/abstractions/types.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/client/chat-client",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/client/chat-client.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/client/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/client/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/client/transport",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/client/transport.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/hosting/endpoints",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/hosting/endpoints.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/hosting/extensibility",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/hosting/extensibility.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/dotnet/hosting/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/dotnet/hosting/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/client/abstract-agent",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/client/abstract-agent.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/client/compaction",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/client/compaction.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/client/http-agent",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/client/http-agent.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/client/middleware",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/client/middleware.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/client/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/client/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/client/subscriber",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/client/subscriber.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/core/events",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/core/events.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/core/multimodal-inputs",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/core/multimodal-inputs.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/core/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/core/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/core/types",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/core/types.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/encoder",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/encoder.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/js/proto",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/js/proto.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/python/core/events",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/python/core/events.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/python/core/multimodal-inputs",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/python/core/multimodal-inputs.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/python/core/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/python/core/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/python/core/types",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/python/core/types.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/sdk/python/encoder/overview",
+    "path": "web-docs/https:/docs.ag-ui.com/sdk/python/encoder/overview.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/talk-to-us",
+    "path": "web-docs/https:/docs.ag-ui.com/talk-to-us.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/tutorials/cursor",
+    "path": "web-docs/https:/docs.ag-ui.com/tutorials/cursor.md"
+  },
+  {
+    "url": "https://docs.ag-ui.com/tutorials/debugging",
+    "path": "web-docs/https:/docs.ag-ui.com/tutorials/debugging.md"
+  }
+]

@@ -1,0 +1,43 @@
+{
+  "source": {
+    "repository": "https://github.com/ag-ui-protocol/ag-ui.git",
+    "commit": "21ae0f551298abae5333af87f73f13e80b9a43fe",
+    "syncedAt": "see SYNCED_AT.txt",
+    "publishedDocs": "https://docs.ag-ui.com"
+  },
+  "counts": {
+    "repoDocsMdx": 113,
+    "webDocsPages": 55,
+    "totalFiles": 506
+  },
+  "sections": {
+    "repoDocs": {
+      "path": "repo-docs/",
+      "description": "Mintlify MDX source from repo docs/ — most complete"
+    },
+    "webDocs": {
+      "path": "web-docs/",
+      "description": "Rendered pages from llms-full.txt + llms-index.txt",
+      "manifest": "web-docs/PAGE_MANIFEST.json"
+    },
+    "repo": {
+      "path": "repo/",
+      "description": "READMEs from root, sdks/, integrations/, middlewares/, apps/dojo/"
+    },
+    "apiSource": {
+      "path": "api-source/",
+      "typescriptPackages": [
+        "@ag-ui/core",
+        "@ag-ui/client",
+        "@ag-ui/encoder",
+        "@ag-ui/proto",
+        "@ag-ui/cli",
+        "@ag-ui/a2ui-toolkit"
+      ]
+    },
+    "skills": {
+      "path": "skills/",
+      "description": "Repo skills/ directory"
+    }
+  }
+}

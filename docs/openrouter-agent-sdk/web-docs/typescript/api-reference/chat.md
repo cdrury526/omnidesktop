@@ -1,0 +1,223 @@
+> ## Documentation Index
+>
+> Fetch the complete documentation index at: [/docs/llms.txt](https://openrouter.ai/docs/llms.txt)
+>
+> Use this file to discover all available pages before exploring further.
+
+[Skip to main content](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat#content-area)
+
+The TypeScript SDK and docs are currently in beta.
+Report issues on [GitHub](https://github.com/OpenRouterTeam/typescript-sdk/issues).
+
+## [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#overview)  Overview
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#available-operations)  Available Operations
+
+- [send](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat#send) \- Create a chat completion
+
+## [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#send)  send
+
+Sends a request for a model response for the given chat conversation. Supports both streaming and non-streaming modes.
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#example-usage-guardrail-blocked)  Example Usage: guardrail-blocked
+
+```
+import { OpenRouter } from "@openrouter/sdk";
+
+const openRouter = new OpenRouter({
+  httpReferer: "<value>",
+  appTitle: "<value>",
+  appCategories: "<value>",
+  apiKey: process.env["OPENROUTER_API_KEY"] ?? "",
+});
+
+async function run() {
+  const result = await openRouter.chat.send({
+    chatRequest: {
+      messages: [\
+        {\
+          content: "You are a helpful assistant.",\
+          role: "system",\
+        },\
+        {\
+          content: "What is the capital of France?",\
+          role: "user",\
+        },\
+      ],
+    },
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+See all 29 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#standalone-function)  Standalone function
+
+The standalone function version of this method:
+
+```
+import { OpenRouterCore } from "@openrouter/sdk/core.js";
+import { chatSend } from "@openrouter/sdk/funcs/chatSend.js";
+
+// Use `OpenRouterCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const openRouter = new OpenRouterCore({
+  httpReferer: "<value>",
+  appTitle: "<value>",
+  appCategories: "<value>",
+  apiKey: process.env["OPENROUTER_API_KEY"] ?? "",
+});
+
+async function run() {
+  const res = await chatSend(openRouter, {
+    chatRequest: {
+      messages: [\
+        {\
+          content: "You are a helpful assistant.",\
+          role: "system",\
+        },\
+        {\
+          content: "What is the capital of France?",\
+          role: "user",\
+        },\
+      ],
+    },
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("chatSend failed:", res.error);
+  }
+}
+
+run();
+```
+
+See all 36 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#example-usage-insufficient-permissions)  Example Usage: insufficient-permissions
+
+```
+import { OpenRouter } from "@openrouter/sdk";
+
+const openRouter = new OpenRouter({
+  httpReferer: "<value>",
+  appTitle: "<value>",
+  appCategories: "<value>",
+  apiKey: process.env["OPENROUTER_API_KEY"] ?? "",
+});
+
+async function run() {
+  const result = await openRouter.chat.send({
+    chatRequest: {
+      messages: [\
+        {\
+          content: "You are a helpful assistant.",\
+          role: "system",\
+        },\
+        {\
+          content: "What is the capital of France?",\
+          role: "user",\
+        },\
+      ],
+    },
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+See all 29 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#standalone-function-2)  Standalone function
+
+The standalone function version of this method:
+
+```
+import { OpenRouterCore } from "@openrouter/sdk/core.js";
+import { chatSend } from "@openrouter/sdk/funcs/chatSend.js";
+
+// Use `OpenRouterCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const openRouter = new OpenRouterCore({
+  httpReferer: "<value>",
+  appTitle: "<value>",
+  appCategories: "<value>",
+  apiKey: process.env["OPENROUTER_API_KEY"] ?? "",
+});
+
+async function run() {
+  const res = await chatSend(openRouter, {
+    chatRequest: {
+      messages: [\
+        {\
+          content: "You are a helpful assistant.",\
+          role: "system",\
+        },\
+        {\
+          content: "What is the capital of France?",\
+          role: "user",\
+        },\
+      ],
+    },
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("chatSend failed:", res.error);
+  }
+}
+
+run();
+```
+
+See all 36 lines
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#parameters)  Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `request` | [operations.SendChatCompletionRequestRequest](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/operations/sendchatcompletionrequestrequest) | :heavy\_check\_mark: | The request object to use for the request. |
+| `options` | RequestOptions | :heavy\_minus\_sign: | Used to set various options for making HTTP requests. |
+| `options.fetchOptions` | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options) | :heavy\_minus\_sign: | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries` | [RetryConfig](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/lib/retryconfig) | :heavy\_minus\_sign: | Enables retrying HTTP requests under certain failure conditions. |
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#response)  Response
+
+**Promise< [operations.SendChatCompletionRequestResponse](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/operations/sendchatcompletionrequestresponse) >**
+
+### [​](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/chat\#errors)  Errors
+
+| Error Type | Status Code | Content Type |
+| --- | --- | --- |
+| errors.BadRequestResponseError | 400 | application/json |
+| errors.UnauthorizedResponseError | 401 | application/json |
+| errors.PaymentRequiredResponseError | 402 | application/json |
+| errors.ForbiddenResponseError | 403 | application/json |
+| errors.NotFoundResponseError | 404 | application/json |
+| errors.RequestTimeoutResponseError | 408 | application/json |
+| errors.PayloadTooLargeResponseError | 413 | application/json |
+| errors.UnprocessableEntityResponseError | 422 | application/json |
+| errors.TooManyRequestsResponseError | 429 | application/json |
+| errors.InternalServerResponseError | 500 | application/json |
+| errors.BadGatewayResponseError | 502 | application/json |
+| errors.ServiceUnavailableResponseError | 503 | application/json |
+| errors.EdgeNetworkTimeoutResponseError | 524 | application/json |
+| errors.ProviderOverloadedResponseError | 529 | application/json |
+| errors.OpenRouterDefaultError | 4XX, 5XX | \*/\* |
+
+[APIKeys](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/apikeys) [Credits](https://openrouter.ai/docs/agent-sdk/typescript/api-reference/credits)
+
+Ctrl+I
+
+Assistant
+
+Responses are generated using AI and may contain mistakes.

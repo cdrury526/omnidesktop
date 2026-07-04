@@ -1,0 +1,28 @@
+{
+  "source": {
+    "repository": "https://github.com/OpenRouterTeam/typescript-agent.git",
+    "commit": "see SOURCE_COMMIT.txt",
+    "syncedAt": "see SYNCED_AT.txt"
+  },
+  "webDocs": {
+    "baseUrl": "https://openrouter.ai/docs/agent-sdk",
+    "pageCount": 39,
+    "index": "web-docs/llms-index.txt"
+  },
+  "packages": [
+    {
+      "name": "@openrouter/agent",
+      "version": "0.7.2",
+      "readme": "repo/packages/agent/README.md",
+      "changelog": "repo/packages/agent/CHANGELOG.md",
+      "exports": "api-source/agent-exports.md",
+      "source": "api-source/agent/"
+    },
+    {
+      "name": "@openrouter/mcp",
+      "readme": "repo/packages/mcp/README.md",
+      "exports": "api-source/mcp-exports.md",
+      "source": "api-source/mcp/"
+    }
+  ]
+}
