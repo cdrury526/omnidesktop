@@ -20,6 +20,7 @@ branches or pull requests by default.
 
 - Frontend typecheck: `./node_modules/.bin/tsc --noEmit`
 - Frontend build: `./node_modules/.bin/vite build`
+- Agent/tool unit tests (when `src/agent/**` tools/registry changed): `pnpm test:unit`
 - Rust build (when `src-tauri/**` changed): `cargo build --manifest-path src-tauri/Cargo.toml`
 - Behavior: drive the running app via the **debug bridge** (`omni-debug-bridge`
   skill, `127.0.0.1:1456`) — `/send`, `/openform`, `/dom`, `/snapshot`, `/events`.
@@ -46,6 +47,77 @@ Before OpenRouter or AG-UI implementation work, prefer checking local docs with
 `pnpm docs:index --compact`, `pnpm docs:search --json ...`, or `pnpm docs:open
 -- <id>` instead of guessing APIs from memory. See `docs/README.md` for command
 examples and `docs/doc-cli-backlog.md` for the tooling backlog.
+
+## Tools and tool registry (OpenRouter Agent SDK)
+
+The app has **two layers** — do not conflate them:
+
+| Layer | Role | Key files |
+|-------|------|-----------|
+| **Registry (policy)** | Persist which tools the user wants in model context | `tool_registry` table (`0007`), `src/lib/tool-registry.ts`, `src/lib/db.ts`, Tools rail panel |
+| **Primitives (execution)** | SDK `tool()` wrappers + Rust chokepoint for Code mode | `src/agent/build-tools.ts`, `mcp-tools.ts`, `code-tools.ts`, `src-tauri/src/fs.rs` |
+
+### Assembly — always use `buildAgentTools`
+
+Every turn/resume/openForm path must build tools the same way:
+
+```ts
+const tools = buildAgentTools({
+  server,
+  workingDir,           // Code tools only when set + reachable
+  summonPanel,
+  toolPolicies,         // Map from toolEnabledMap(registry rows)
+});
+```
+
+`buildAgentTools` (exported via `src/agent/runner.ts`):
+
+1. Filters MCP + built-in Code tools by persisted `enabled` policy (missing row → **enabled**).
+2. On name collision, **host Code tools win** over MCP (event: `tool.collision`).
+3. Asserts **unique tool names** before `callModel` — the SDK rejects shadowed tools.
+
+Do **not** call `buildMcpTools` / `buildCodeTools` directly from hooks except inside
+`build-tools.ts`. Do **not** bypass the registry when adding new tools.
+
+### Registry sync and UI
+
+- **`syncToolRegistry(server)`** — upsert `CODE_TOOL_DEFINITIONS` + connected MCP
+  `listTools` into DB; preserves existing `enabled` on conflict.
+- **`listActiveToolRegistry(mcpUrl)`** — Tools panel shows builtins + current MCP
+  server only. Stale MCP rows stay in DB so reconnect restores user prefs.
+- Keys: `builtin:code` + `""` + name; `mcp` + server URL + name (`toolPolicyKey`).
+
+### OpenRouter SDK — two pause mechanisms
+
+Before changing tool behavior, check local docs (not memory):
+
+```bash
+pnpm docs:search --mirror openrouter-agent-sdk requireApproval
+pnpm docs:open -- <id>   # e.g. tool-approval-state, tools
+pnpm docs:symbol callModel
+```
+
+| SDK status | Use for | Host resume |
+|------------|---------|-------------|
+| `awaiting_hitl` | Interactive MCP forms (`onToolCalled` → `null`) | `resumeTurn` + `function_call_output` |
+| `awaiting_approval` | Sensitive Code tools (`requireApproval: true`) | `resumeApprovalTurn` + `approveToolCalls` / `rejectToolCalls` |
+
+- **HITL** = user fills data (forms). **Approval** = yes/no before execute (write/run).
+- Read tools (`list_dir`, `read_file`) run without approval. Future `write_file` /
+  `run_command` use `requireApproval` when `permissions.mode === "ask"`; `yolo`
+  skips approval only — never Rust path scoping (`CODE_TOOLS_SDK_NOTES.md`).
+- UI: Approve/Reject on tool cards; debug bridge `/approve`, `/reject` (optional
+  `callIds` array). State helpers: `pendingHitlCall`, `pendingApprovalCalls`.
+
+### Adding a new tool
+
+1. **MCP** — discovered automatically on connect; registry row created on sync.
+2. **Built-in Code** — add to `CODE_TOOL_DEFINITIONS`, implement in
+   `buildCodeTools`, add Rust command in `fs.rs` (path scoping mandatory).
+3. If sensitive, add name to `SENSITIVE_CODE_TOOLS` in `code-tools.ts`.
+4. Extend `pnpm test:unit` if you add pure policy/name logic.
+
+See also `CODE_MODE_BRIEF.md`, `CODE_TOOLS_SDK_NOTES.md`, `HANDOFF.md` (roadmap).
 
 ## Commit messages
 
