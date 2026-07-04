@@ -9,12 +9,14 @@ import { Empty, Input } from "antd";
 import { MessageOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
 import { ConversationLabel } from "./ConversationLabel";
-import { deleteConversationMenu } from "./conversationMenu";
+import { ConversationRenameModal } from "./ConversationRenameModal";
+import { conversationMenu } from "./conversationMenu";
 
 interface Props {
   conversations: ConversationRow[];
   activeId: number | null;
   onSelect: (id: number) => void;
+  onRename: (id: number, title: string) => Promise<void>;
   onDelete: (id: number) => void;
 }
 
@@ -29,8 +31,13 @@ function toItem(c: ConversationRow): ConversationItemType {
   };
 }
 
-export function HistoryPanel({ conversations, activeId, onSelect, onDelete }: Props) {
+export function HistoryPanel({ conversations, activeId, onSelect, onRename, onDelete }: Props) {
   const [query, setQuery] = useState("");
+  const [renameId, setRenameId] = useState<number | null>(null);
+  const renameTarget = useMemo(
+    () => conversations.find((c) => c.id === renameId) ?? null,
+    [conversations, renameId],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -63,9 +70,18 @@ export function HistoryPanel({ conversations, activeId, onSelect, onDelete }: Pr
           items={items}
           activeKey={activeId != null ? String(activeId) : undefined}
           onActiveChange={(key) => onSelect(Number(key))}
-          menu={deleteConversationMenu(onDelete)}
+          menu={conversationMenu({ onRename: setRenameId, onDelete })}
         />
       )}
+      <ConversationRenameModal
+        open={!!renameTarget}
+        conversation={renameTarget}
+        onCancel={() => setRenameId(null)}
+        onRename={async (id, title) => {
+          await onRename(id, title);
+          setRenameId(null);
+        }}
+      />
     </div>
   );
 }

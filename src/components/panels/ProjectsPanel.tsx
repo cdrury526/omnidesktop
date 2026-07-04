@@ -5,18 +5,20 @@
  * folder. Chats with no working folder (plain chat mode) don't appear here —
  * they live in History.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Conversations, type ConversationItemType } from "@ant-design/x";
 import { Badge, Empty, Tooltip } from "antd";
 import { CodeOutlined, FolderOutlined, PlusOutlined } from "@ant-design/icons";
 import type { ConversationRow } from "../../lib/db";
 import { ConversationLabel } from "./ConversationLabel";
-import { deleteConversationMenu } from "./conversationMenu";
+import { ConversationRenameModal } from "./ConversationRenameModal";
+import { conversationMenu } from "./conversationMenu";
 
 interface Props {
   conversations: ConversationRow[];
   activeId: number | null;
   onSelect: (id: number) => void;
+  onRename: (id: number, title: string) => Promise<void>;
   onDelete: (id: number) => void;
   /** Start a new chat already bound to `workingDir` (code mode on). */
   onNewInProject: (workingDir: string) => void;
@@ -44,9 +46,11 @@ export function ProjectsPanel({
   conversations,
   activeId,
   onSelect,
+  onRename,
   onDelete,
   onNewInProject,
 }: Props) {
+  const [renameId, setRenameId] = useState<number | null>(null);
   const projectDirs = useMemo(() => {
     const dirs: string[] = [];
     const seen = new Set<string>();
@@ -61,6 +65,10 @@ export function ProjectsPanel({
   const items = useMemo(
     () => conversations.filter((c) => c.working_dir).map(toItem),
     [conversations],
+  );
+  const renameTarget = useMemo(
+    () => conversations.find((c) => c.id === renameId) ?? null,
+    [conversations, renameId],
   );
 
   if (projectDirs.length === 0) {
@@ -81,7 +89,7 @@ export function ProjectsPanel({
         items={items}
         activeKey={activeId != null ? String(activeId) : undefined}
         onActiveChange={(key) => onSelect(Number(key))}
-        menu={deleteConversationMenu(onDelete)}
+        menu={conversationMenu({ onRename: setRenameId, onDelete })}
         groupable={{
           collapsible: true,
           defaultExpandedKeys: projectDirs,
@@ -109,6 +117,15 @@ export function ProjectsPanel({
               </span>
             </Tooltip>
           ),
+        }}
+      />
+      <ConversationRenameModal
+        open={!!renameTarget}
+        conversation={renameTarget}
+        onCancel={() => setRenameId(null)}
+        onRename={async (id, title) => {
+          await onRename(id, title);
+          setRenameId(null);
         }}
       />
     </div>

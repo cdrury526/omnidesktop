@@ -26,8 +26,8 @@ capability-table tests guard built-in drift.
 
 ### 1. Productize workspace basics
 
-Conversation rename, retry/regenerate, MCP server manager UI, real empty/error
-states for Tools / Agents / Commands rail sections.
+Retry/regenerate, MCP server manager UI, real empty/error states for Tools /
+Agents / Commands rail sections.
 
 ### 2. Next Code tools
 
@@ -59,6 +59,15 @@ Turso/cloud sync — after the local coding workflow is solid.
   execution logging for future tools.
 - `CODE_TOOL_CAPABILITIES` plus unit tests prevent registry/implementation and
   sensitivity/approval drift.
+
+## ✅ DONE — Conversation rename
+
+History and Projects rail conversation menus now include **Rename** next to
+Delete. The rename flow uses an antd modal/input, persists to
+`conversations.title` without bumping `updated_at`, refreshes conversation rows,
+and active plain-chat tab labels update from the refreshed title. Verified via
+debug bridge by renaming an active history item, observing the History row and
+tab label update, then restoring the original title.
 
 ## ✅ DONE — Code mode phase 2: `write_file` + `run_command` (commit `6ee790b3`)
 

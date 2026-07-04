@@ -170,6 +170,10 @@ export async function createConversation(title: string): Promise<number> {
   return r.lastInsertId;
 }
 
+export async function renameConversation(id: number, title: string): Promise<void> {
+  await dbExecute("UPDATE conversations SET title = ? WHERE id = ?", [title, id]);
+}
+
 export async function listConversations(): Promise<ConversationRow[]> {
   return dbSelect<ConversationRow>(
     "SELECT id, title, updated_at, code_mode, working_dir FROM conversations " +

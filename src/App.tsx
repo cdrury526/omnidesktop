@@ -17,6 +17,7 @@ import {
   setSetting,
   listConversations,
   deleteConversation,
+  renameConversation,
   setToolEnabled,
   toolEnabledMap,
   type ConversationRow,
@@ -199,6 +200,14 @@ export default function App() {
     [removeConversationFromTabs, refreshConversations],
   );
 
+  const renameConversationTitle = useCallback(
+    async (id: number, title: string) => {
+      await renameConversation(id, title);
+      await refreshConversations();
+    },
+    [refreshConversations],
+  );
+
   const activeHandlers = () => bridgeRef.current.get(focusKeyRef.current);
   useDebugBridge({
     connect: async (url) => {
@@ -288,6 +297,7 @@ export default function App() {
               conversations={conversations}
               activeId={highlightedConvId}
               onSelect={handleOpenConversation}
+              onRename={renameConversationTitle}
               onDelete={removeConversation}
             />
           )}
@@ -296,6 +306,7 @@ export default function App() {
               conversations={conversations}
               activeId={highlightedConvId}
               onSelect={handleOpenConversation}
+              onRename={renameConversationTitle}
               onDelete={removeConversation}
               onNewInProject={(dir) => void newChatInProject(dir)}
             />
