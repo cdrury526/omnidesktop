@@ -99,7 +99,8 @@ This is the "tools piece" that comes after the folder toggle. Written down now s
 the first step is built to fit it. The model is: **the agent's tool calls hit OUR
 host, and the host executes them via Rust** — the same boundary the app already
 uses for HTTP, keyring, and DB. There is no external "filesystem MCP server"; the
-fs tools are built into the host.
+fs tools are built into the host. See `CODE_TOOLS_SDK_NOTES.md` for the
+OpenRouter Agent SDK-specific tool and approval shape.
 
 **Shape:**
 - A `buildCodeTools({ workingDir, permissions })` module alongside
@@ -134,9 +135,9 @@ fs tools are built into the host.
   iframes never get filesystem or command bridges; events are logged for every
   read/list/write/command attempt and result.
 - **Default `ask` mode:** `list_dir` / `read_file` may run directly within the
-  scoped root. `write_file` / `run_command` first create an approval request using
-  the existing HITL pause/resume flow, then execute only after the user approves.
-- **`yolo` / `--dangerously-skip-permissions` mode:** skip HITL approval for
+  scoped root. `write_file` / `run_command` use the SDK's `requireApproval`
+  gate, then execute only after the user approves.
+- **`yolo` / `--dangerously-skip-permissions` mode:** skip SDK approval for
   writes and commands, but **do not skip Rust scoping, canonicalization, logging,
   command working-directory confinement, or output limits**. This mode is
   equivalent to Codex/Claude Code's "I know this can modify/run things in my
@@ -145,15 +146,16 @@ fs tools are built into the host.
 - **Implementation implication:** do not bake "approval required" into the Rust
   filesystem functions. Rust should expose safe primitives (`fs_read`, `fs_write`,
   `run_command`) that always enforce scope; the JS agent tool layer decides
-  whether a given operation needs HITL based on `permissions.mode`.
+  whether a given operation needs approval based on `permissions.mode`.
 
 **Reuse what already exists:**
-- **HITL approval** — the durable pause/resume built for forms is ideal for
-  "the agent wants to write `main.rs` / run `cargo build` — approve?" Gate
-  `write_file` / `run_command` behind user confirmation in default `ask` mode;
-  `yolo` mode bypasses only this HITL checkpoint. `run_command` is the most
-  dangerous (arbitrary exec even when scoped), so its approval card should show
-  command, cwd, timeout, and expected file-write risk before yolo is enabled.
+- **SDK approval state** — use `requireApproval` for "the agent wants to write
+  `main.rs` / run `cargo build` — approve?" This gives us
+  `awaiting_approval`, pending tool calls, and resume via `approveToolCalls` /
+  `rejectToolCalls`. `yolo` mode bypasses only this approval checkpoint.
+  `run_command` is the most dangerous (arbitrary exec even when scoped), so its
+  approval card should show command, cwd, timeout, and expected file-write risk
+  before yolo is enabled.
 - **Events log** — every `fs_write` / `run_command` is an audit-trail entry for free.
 
 Slogan to keep straight: *"tools hit our app, we execute via Rust"* is the

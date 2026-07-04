@@ -20,13 +20,13 @@ interactive forms (HITL) with durable pause/resume, message queuing, cancel,
 The app is working end-to-end as a local AI desktop/workspace shell. The next
 sessions should move in this order:
 
-1. **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`) — add
-   Rust-scoped `list_dir` / `read_file` first, then `write_file` / `run_command`
-   behind a first-class permission mode: default ask/HITL, optional
-   `yolo` / `--dangerously-skip-permissions` that skips approval but never skips
-   Rust path scoping, canonicalization, output limits, or event logging. The
-   current Code mode is prompt/context only; Rust currently exposes only
-   `path_is_dir`.
+1. **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`,
+   `CODE_TOOLS_SDK_NOTES.md`) — add Rust-scoped `list_dir` / `read_file` first,
+   then `write_file` / `run_command` behind SDK `requireApproval`: default
+   ask/approve, optional `yolo` / `--dangerously-skip-permissions` that skips
+   approval but never skips Rust path scoping, canonicalization, output limits,
+   or event logging. The current Code mode is prompt/context only; Rust
+   currently exposes only `path_is_dir`.
 2. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
    server manager UI, and real empty/error states for the Tools / Agents /
    Commands rail sections.
@@ -398,8 +398,9 @@ The chat→coding workspace is being built in phases (Stitch renders in
   reduce time-to-first-token with a snappier model. Not a bug.
 - **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md`: scoped
   Rust `list_dir` / `read_file`, then `write_file` / `run_command` using the
-  permission-mode architecture: ask/HITL by default, optional yolo mode that
-  skips approval only, never Rust scoping/logging.
+  permission-mode architecture in `CODE_TOOLS_SDK_NOTES.md`: SDK
+  `requireApproval` by default, optional yolo mode that skips approval only,
+  never Rust scoping/logging.
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference
   the earlier result) — built + headless-verified, not yet eyeballed live.
 - Productize workspace basics: conversation rename, retry/regenerate, MCP server
