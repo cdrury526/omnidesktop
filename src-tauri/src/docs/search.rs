@@ -94,7 +94,7 @@ pub async fn search(
                  snippet(doc_pages_fts, 3, '…', '…', '…', 48) AS excerpt \
                  FROM doc_pages_fts f JOIN doc_pages p ON p.id = f.rowid \
                  WHERE doc_pages_fts MATCH ? AND p.mirror = ? AND p.layer = ? \
-                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank LIMIT ?",
+                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, l, c, like, lim],
             )
             .await
@@ -104,7 +104,7 @@ pub async fn search(
                 "SELECT p.id, p.mirror, p.layer, p.category, p.slug, p.rel_path, p.title, p.byte_size, \
                  snippet(doc_pages_fts, 3, '…', '…', '…', 48) AS excerpt \
                  FROM doc_pages_fts f JOIN doc_pages p ON p.id = f.rowid \
-                 WHERE doc_pages_fts MATCH ? AND p.mirror = ? AND p.layer = ? ORDER BY rank LIMIT ?",
+                 WHERE doc_pages_fts MATCH ? AND p.mirror = ? AND p.layer = ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, l, lim],
             )
             .await
@@ -116,7 +116,7 @@ pub async fn search(
                  snippet(doc_pages_fts, 3, '…', '…', '…', 48) AS excerpt \
                  FROM doc_pages_fts f JOIN doc_pages p ON p.id = f.rowid \
                  WHERE doc_pages_fts MATCH ? AND p.mirror = ? \
-                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank LIMIT ?",
+                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, c, like, lim],
             )
             .await
@@ -126,7 +126,7 @@ pub async fn search(
                 "SELECT p.id, p.mirror, p.layer, p.category, p.slug, p.rel_path, p.title, p.byte_size, \
                  snippet(doc_pages_fts, 3, '…', '…', '…', 48) AS excerpt \
                  FROM doc_pages_fts f JOIN doc_pages p ON p.id = f.rowid \
-                 WHERE doc_pages_fts MATCH ? AND p.mirror = ? ORDER BY rank LIMIT ?",
+                 WHERE doc_pages_fts MATCH ? AND p.mirror = ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, lim],
             )
             .await
@@ -136,7 +136,7 @@ pub async fn search(
                 "SELECT p.id, p.mirror, p.layer, p.category, p.slug, p.rel_path, p.title, p.byte_size, \
                  snippet(doc_pages_fts, 3, '…', '…', '…', 48) AS excerpt \
                  FROM doc_pages_fts f JOIN doc_pages p ON p.id = f.rowid \
-                 WHERE doc_pages_fts MATCH ? AND p.layer = ? ORDER BY rank LIMIT ?",
+                 WHERE doc_pages_fts MATCH ? AND p.layer = ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, l, lim],
             )
             .await
@@ -146,7 +146,7 @@ pub async fn search(
                 "SELECT p.id, p.mirror, p.layer, p.category, p.slug, p.rel_path, p.title, p.byte_size, \
                  snippet(doc_pages_fts, 3, '…', '…', '…', 48) AS excerpt \
                  FROM doc_pages_fts f JOIN doc_pages p ON p.id = f.rowid \
-                 WHERE doc_pages_fts MATCH ? ORDER BY rank LIMIT ?",
+                 WHERE doc_pages_fts MATCH ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, lim],
             )
             .await
@@ -182,7 +182,7 @@ pub async fn search_chunks(
                  FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
                  JOIN doc_pages p ON p.id = c.page_id \
                  WHERE doc_chunks_fts MATCH ? AND p.mirror = ? AND p.layer = ? \
-                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank LIMIT ?",
+                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, l, c, like, lim],
             )
             .await
@@ -194,7 +194,7 @@ pub async fn search_chunks(
                  snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
                  FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
                  JOIN doc_pages p ON p.id = c.page_id \
-                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? AND p.layer = ? ORDER BY rank LIMIT ?",
+                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? AND p.layer = ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, l, lim],
             )
             .await
@@ -208,7 +208,7 @@ pub async fn search_chunks(
                  FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
                  JOIN doc_pages p ON p.id = c.page_id \
                  WHERE doc_chunks_fts MATCH ? AND p.mirror = ? \
-                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank LIMIT ?",
+                 AND (p.category = ? OR p.category LIKE ?) ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, c, like, lim],
             )
             .await
@@ -220,7 +220,7 @@ pub async fn search_chunks(
                  snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
                  FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
                  JOIN doc_pages p ON p.id = c.page_id \
-                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? ORDER BY rank LIMIT ?",
+                 WHERE doc_chunks_fts MATCH ? AND p.mirror = ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, m, lim],
             )
             .await
@@ -232,7 +232,7 @@ pub async fn search_chunks(
                  snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
                  FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
                  JOIN doc_pages p ON p.id = c.page_id \
-                 WHERE doc_chunks_fts MATCH ? AND p.layer = ? ORDER BY rank LIMIT ?",
+                 WHERE doc_chunks_fts MATCH ? AND p.layer = ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, l, lim],
             )
             .await
@@ -244,7 +244,7 @@ pub async fn search_chunks(
                  snippet(doc_chunks_fts, 1, '…', '…', '…', 48) AS excerpt \
                  FROM doc_chunks_fts f JOIN doc_chunks c ON c.id = f.rowid \
                  JOIN doc_pages p ON p.id = c.page_id \
-                 WHERE doc_chunks_fts MATCH ? ORDER BY rank LIMIT ?",
+                 WHERE doc_chunks_fts MATCH ? ORDER BY rank, CASE p.layer WHEN 'official' THEN 0 WHEN 'published' THEN 1 WHEN 'guides' THEN 2 WHEN 'source' THEN 3 WHEN 'reference' THEN 4 ELSE 5 END, p.rel_path LIMIT ?",
                 libsql::params![fts, lim],
             )
             .await

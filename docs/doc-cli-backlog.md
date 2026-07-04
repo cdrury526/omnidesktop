@@ -31,10 +31,10 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
   - Example: `resolve stopWhen` → `published/call-model/stop-conditions.md`.
   - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:resolve stopWhen | node -e ...`; `pnpm docs:resolve --top3 events | node -e ...`; `pnpm docs:resolve --json stopWhen | node -e ...`.
 
-- [ ] **5. Layer priority in search ranking**
+- [x] **5. Layer priority in search ranking**
   - Boost order when FTS scores tie: `official` → `published` → `guides` → `source` → `reference`.
   - Configurable in `docs/_taxonomy.yaml` or hardcoded defaults.
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:search --json events | node -e ...`; `pnpm docs:search --chunks --json events | node -e ...`.
 
 ---
 
