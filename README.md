@@ -85,7 +85,7 @@ connect to an MCP server, and chat. To try an inline MCP App, run an
 | `src/components/TabBar.tsx` · `SideRail.tsx` | Workspace tabs/split controls · navigation rail |
 | `src/components/panels/HistoryPanel.tsx` · `ProjectsPanel.tsx` | History and project-folder panels |
 | `src/components/ChatWelcome.tsx` | Empty-state Welcome+Prompts |
-| `src/agent/runner.ts` | OpenRouter agent loop; MCP tools → SDK tools w/ auto-summon, cancel |
+| `src/agent/runner.ts` | Agent barrel; see `src/agent/turns.ts`, `mcp-tools.ts`, `state-display.ts` |
 | `src/mcp/host-bridge.ts` | MCP Apps host bridge (AppBridge wiring) |
 | `src/lib/db.ts` · `src/lib/secrets.ts` | DB + keyring frontend APIs |
 | `src-tauri/src/db/` | libSQL data layer (`mod.rs`) + versioned `migrations.rs` + `schema/` |
@@ -93,7 +93,8 @@ connect to an MCP server, and chat. To try an inline MCP App, run an
 
 ## Roadmap
 
-- Code mode filesystem tools: scoped read/list first, then gated write/command
+- Code mode filesystem tools: scoped read/list first, then write/command with
+  default ask/HITL approval plus optional yolo mode
 - Conversation rename · retry/regenerate · MCP server manager UI
 - Production cross-origin sandbox sidecar · bundle splitting
 - Turso cloud sync after the local coding workflow is solid

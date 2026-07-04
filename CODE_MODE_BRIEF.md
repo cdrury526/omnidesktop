@@ -72,7 +72,7 @@ future tab wraps.
 3. **Persistence + load.** `src/lib/db.ts` get/set helpers for a conversation's
    mode + dir; `useAgentChat.hydrate()` loads them; App (or the hook) holds the
    state and persists on toggle/change.
-4. **Prompt injection.** `src/agent/runner.ts`: thread an optional `workingDir`
+4. **Prompt injection.** `src/agent/turns.ts`: thread an optional `workingDir`
    into `runTurn`/`resumeTurn`/`openForm`; when set, append a code-mode section to
    `SYSTEM_PROMPT` (e.g. "You are in code mode. The working folder for this
    session is `<path>`. …"). Keep it minimal now — a directory listing is a tool
@@ -102,12 +102,17 @@ uses for HTTP, keyring, and DB. There is no external "filesystem MCP server"; th
 fs tools are built into the host.
 
 **Shape:**
-- A `buildCodeTools(workingDir)` in `src/agent/runner.ts` (sibling to
-  `buildMcpTools`), registered only in code mode: `read_file`, `list_dir`,
+- A `buildCodeTools({ workingDir, permissions })` module alongside
+  `buildMcpTools`, registered only in code mode: `read_file`, `list_dir`,
   `write_file`, `run_command`, … Each tool's `execute()` calls a Rust command
   via `invoke("fs_read", …)` etc. The agent sees the tools; Rust does the work.
 - New Rust module (e.g. `src-tauri/src/fs.rs`) exposing those commands, each
   taking the conversation's `working_dir` + a path/args.
+- A first-class **permission mode** travels with Code mode tool execution:
+  default `ask`, optional `yolo` / `--dangerously-skip-permissions`. Build every
+  write/command path as `propose -> policy decision -> execute`, so the approval
+  step can be interactive in `ask` mode and skipped in `yolo` mode without
+  changing the execution engine.
 
 **Two separate boundaries — both required:**
 1. **Execution boundary (mostly free).** The untrusted MCP App iframes are
@@ -123,17 +128,38 @@ fs tools are built into the host.
    scoping check is the load-bearing code and must live in Rust (the chokepoint),
    not the JS tool layer.
 
+**Permission model, designed for a future yolo mode:**
+- **Always enforced:** Code tools are only registered when Code mode has a
+  reachable `working_dir`; Rust resolves all paths under that root; untrusted MCP
+  iframes never get filesystem or command bridges; events are logged for every
+  read/list/write/command attempt and result.
+- **Default `ask` mode:** `list_dir` / `read_file` may run directly within the
+  scoped root. `write_file` / `run_command` first create an approval request using
+  the existing HITL pause/resume flow, then execute only after the user approves.
+- **`yolo` / `--dangerously-skip-permissions` mode:** skip HITL approval for
+  writes and commands, but **do not skip Rust scoping, canonicalization, logging,
+  command working-directory confinement, or output limits**. This mode is
+  equivalent to Codex/Claude Code's "I know this can modify/run things in my
+  project" toggle, not a way for the model or MCP iframe to escape the app's
+  native boundary.
+- **Implementation implication:** do not bake "approval required" into the Rust
+  filesystem functions. Rust should expose safe primitives (`fs_read`, `fs_write`,
+  `run_command`) that always enforce scope; the JS agent tool layer decides
+  whether a given operation needs HITL based on `permissions.mode`.
+
 **Reuse what already exists:**
 - **HITL approval** — the durable pause/resume built for forms is ideal for
   "the agent wants to write `main.rs` / run `cargo build` — approve?" Gate
-  `write_file` / `run_command` behind user confirmation to start; loosen later.
-  `run_command` is the most dangerous (arbitrary exec even when scoped) — gate it
-  hardest, consider an allowlist.
+  `write_file` / `run_command` behind user confirmation in default `ask` mode;
+  `yolo` mode bypasses only this HITL checkpoint. `run_command` is the most
+  dangerous (arbitrary exec even when scoped), so its approval card should show
+  command, cwd, timeout, and expected file-write risk before yolo is enabled.
 - **Events log** — every `fs_write` / `run_command` is an audit-trail entry for free.
 
 Slogan to keep straight: *"tools hit our app, we execute via Rust"* is the
 **transport**; the **safety** is *Rust enforces the path is inside the working dir
-+ writes/exec are user-approved.* Both, or it's a footgun.
++ writes/exec follow the selected permission mode.* `yolo` can bypass approval,
+not the Rust boundary.
 
 ## Guardrails (non-negotiable, from this project)
 

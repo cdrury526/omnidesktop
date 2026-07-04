@@ -21,19 +21,27 @@ The app is working end-to-end as a local AI desktop/workspace shell. The next
 sessions should move in this order:
 
 1. **Code mode phase 2 — filesystem tools** (`CODE_MODE_BRIEF.md`) — add
-   Rust-scoped `list_dir` / `read_file` first, then gated `write_file` /
-   `run_command` with HITL approval and event logging. The current Code mode is
-   prompt/context only; Rust currently exposes only `path_is_dir`.
-2. **Refactor agent internals before piling on tool logic** — split
-   `src/agent/runner.ts` and `src/hooks/useAgentChat.ts` back under the 600-line
-   repo rule. Do this before filesystem tools get large.
-3. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
+   Rust-scoped `list_dir` / `read_file` first, then `write_file` / `run_command`
+   behind a first-class permission mode: default ask/HITL, optional
+   `yolo` / `--dangerously-skip-permissions` that skips approval but never skips
+   Rust path scoping, canonicalization, output limits, or event logging. The
+   current Code mode is prompt/context only; Rust currently exposes only
+   `path_is_dir`.
+2. **Productize workspace basics** — conversation rename, retry/regenerate, MCP
    server manager UI, and real empty/error states for the Tools / Agents /
    Commands rail sections.
-4. **Production hardening** — production sandbox sidecar, bundle splitting,
+3. **Production hardening** — production sandbox sidecar, bundle splitting,
    README/release packaging sanity checks.
-5. **Sync later** — Turso/cloud sync should wait until the local coding workflow
+4. **Sync later** — Turso/cloud sync should wait until the local coding workflow
    is solid.
+
+## ✅ DONE — Agent internals split (commit `10f2dfe`)
+
+`src/agent/runner.ts` is now a barrel over focused modules:
+`mcp-tools.ts`, `turns.ts`, `state-display.ts`, `telemetry.ts`,
+`toolcall-leak.ts`, and `turn-repair.ts`. `useAgentChat.ts` was trimmed to the
+600-line repo limit by extracting bridge result helpers, error copy, and hook
+types. This should stay split before adding Code mode filesystem logic.
 
 ## ✅ DONE — Inline MCP Apps in the transcript (commit `5e055728`)
 
@@ -91,7 +99,7 @@ auto MCP connect + `mcp.connect.*` events, and split view.
 - `getCodeMode`/`setCodeMode` in `src/lib/db.ts`; `useAgentChat` holds the
   `codeMode`/`workingDir` state, loads it in `hydrate`, persists on
   toggle/change and on new-chat creation. **New chats default to off.**
-- `runner.ts` `instructionsFor(workingDir)` appends a Code-mode prompt section
+- `turns.ts` `instructionsFor(workingDir)` appends a Code-mode prompt section
   (explicitly honest that there are NO file tools yet); threaded through
   `runTurn`/`resumeTurn`/`repairToolCall`.
 - `src/components/CodeModeToggle.tsx` — header Chat/Code switch + folder chip
@@ -166,7 +174,7 @@ pnpm tauri dev          # Vite :1420 + sandbox proxy :1430 + native window
 | Inline MCP App mount (sandbox iframe embedded on its tool card) | `src/components/InlineAppMount.tsx` |
 | Searchable history drawer (Ant) | `src/components/HistoryDrawer.tsx` |
 | Model picker (Ant Select over OpenRouter catalog) | `src/components/ModelPicker.tsx` |
-| **Agent loop** (OpenRouter SDK; HITL forms; queue/repair; tool reliability) | `src/agent/runner.ts` |
+| **Agent loop barrel** (OpenRouter SDK; HITL forms; queue/repair; tool reliability) | `src/agent/runner.ts` → `mcp-tools.ts`, `turns.ts`, `state-display.ts`, `telemetry.ts`, `turn-repair.ts` |
 | Model catalog fetch | `src/agent/models.ts` |
 | JSON Schema → Zod (for SDK `tool()` inputSchema) | `src/agent/json-schema-to-zod.ts` |
 | **Interactive-forms DSL** (field union, `when`, validators, Zod schema) | `packages/forms-dsl/` |
@@ -389,9 +397,9 @@ The chat→coding workspace is being built in phases (Stitch renders in
   per-token. If smoother output is wanted, enable `Bubble` `typing` animation, or
   reduce time-to-first-token with a snappier model. Not a bug.
 - **Code mode phase 2 — filesystem tools** — see `CODE_MODE_BRIEF.md`: scoped
-  Rust `list_dir` / `read_file`, then HITL-gated `write_file` / `run_command`.
-- **Agent internals split** — `runner.ts` and `useAgentChat.ts` are over the
-  600-line source-file limit; split before adding more agent/tool behavior.
+  Rust `list_dir` / `read_file`, then `write_file` / `run_command` using the
+  permission-mode architecture: ask/HITL by default, optional yolo mode that
+  skips approval only, never Rust scoping/logging.
 - Live multi-turn tool-persistence sanity check (call a tool, reload, reference
   the earlier result) — built + headless-verified, not yet eyeballed live.
 - Productize workspace basics: conversation rename, retry/regenerate, MCP server
