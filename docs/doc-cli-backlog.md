@@ -26,10 +26,10 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
   - Biggest token win on large MDX (e.g. `official/concepts/events.mdx`).
   - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:ingest`; `pnpm docs:search --chunks --mirror ag-ui-protocol events | node -e ...`; `pnpm docs:search --chunks --json --mirror ag-ui-protocol events | node -e ...`; `pnpm docs:open-chunk -- <id> | node -e ...`.
 
-- [ ] **4. `resolve <topic>`**
+- [x] **4. `resolve <topic>`**
   - Fuzzy single-best-doc lookup (path + title + slug), prints one hit or top 3.
   - Example: `resolve stopWhen` → `published/call-model/stop-conditions.md`.
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:resolve stopWhen | node -e ...`; `pnpm docs:resolve --top3 events | node -e ...`; `pnpm docs:resolve --json stopWhen | node -e ...`.
 
 - [ ] **5. Layer priority in search ranking**
   - Boost order when FTS scores tie: `official` → `published` → `guides` → `source` → `reference`.

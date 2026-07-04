@@ -54,6 +54,10 @@ pnpm docs:list --json --mirror openrouter-agent-sdk --layer published
 pnpm docs:index --compact
 pnpm docs:index --compact --mirror ag-ui-protocol
 
+# Fuzzy lookup by topic, path, title, or slug
+pnpm docs:resolve stopWhen
+pnpm docs:resolve --top3 events
+
 # Full content by hit id
 pnpm docs:open -- 42
 pnpm docs:open --json 42

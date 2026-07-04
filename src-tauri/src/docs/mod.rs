@@ -6,9 +6,11 @@
 //! `_provenance/` is skipped.
 
 mod ingest;
+mod resolve;
 mod search;
 
 pub use ingest::{ingest_mirror, ingest_root, IngestReport};
+pub use resolve::{resolve_topic, ResolveHit};
 pub use search::{
     list_categories, list_layers, list_mirrors, list_pages, open_chunk, open_page, open_page_json,
     search, search_chunks, stats, DocChunk, DocChunkHit, DocHit, DocMeta, DocPage,

@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use omni_desktop_lib::db;
 use omni_desktop_lib::docs::{
     ingest_mirror, ingest_root, list_categories, list_layers, list_mirrors, list_pages, open_chunk,
-    open_page, open_page_json, search, search_chunks, stats, IngestReport,
+    open_page, open_page_json, resolve_topic, search, search_chunks, stats, IngestReport,
 };
 use std::path::PathBuf;
 
@@ -81,6 +81,18 @@ enum Command {
         compact: bool,
         #[arg(long)]
         mirror: Option<String>,
+    },
+    /// Fuzzy lookup for the best matching document
+    Resolve {
+        topic: String,
+        #[arg(long)]
+        mirror: Option<String>,
+        /// Print the top three matches instead of only the best one
+        #[arg(long)]
+        top3: bool,
+        /// Emit JSON array of matches
+        #[arg(long)]
+        json: bool,
     },
     /// Row counts per mirror/layer
     Stats,
@@ -270,6 +282,37 @@ async fn main() -> Result<(), String> {
                 );
             }
         }
+        Command::Resolve {
+            topic,
+            mirror,
+            top3,
+            json,
+        } => {
+            let limit = if top3 { 3 } else { 1 };
+            let hits = resolve_topic(&database, &topic, mirror.as_deref(), limit).await?;
+            if json {
+                print_json(&hits)?;
+                return Ok(());
+            }
+            if hits.is_empty() {
+                println!("(no matches)");
+                return Ok(());
+            }
+            for hit in hits {
+                let title = hit.doc.title.as_deref().unwrap_or(&hit.doc.slug);
+                println!(
+                    "[{} score:{}] {}  {} / {} / {}\n  → {}/{}",
+                    hit.doc.id,
+                    hit.score,
+                    title,
+                    hit.doc.mirror,
+                    hit.doc.layer,
+                    display_category(&hit.doc.category),
+                    hit.doc.mirror,
+                    hit.doc.rel_path
+                );
+            }
+        }
         Command::Stats => {
             let rows = stats(&database).await?;
             let mut total = 0i64;
@@ -332,6 +375,14 @@ fn compact_field(value: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .replace('|', "/")
+}
+
+fn display_category(value: &str) -> &str {
+    if value.is_empty() {
+        "-"
+    } else {
+        value
+    }
 }
 
 fn slugify_heading(value: &str) -> String {
