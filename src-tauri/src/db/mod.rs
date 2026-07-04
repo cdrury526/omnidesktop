@@ -17,7 +17,7 @@ use serde_json::Value as Json;
 use std::path::PathBuf;
 
 pub struct Db {
-    conn: Connection,
+    pub(crate) conn: Connection,
     /// Retained for future Turso sync (`database.sync().await`).
     #[allow(dead_code)]
     database: Database,

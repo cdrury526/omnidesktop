@@ -1,0 +1,22 @@
+{
+  "source": {
+    "repository": "https://github.com/ag-ui-protocol/ag-ui.git",
+    "commit": "see _provenance/SOURCE_COMMIT.txt",
+    "syncedAt": "see _provenance/SYNCED_AT.txt",
+    "publishedDocs": "https://docs.ag-ui.com"
+  },
+  "layers": {
+    "official": "Mintlify MDX source (canonical)",
+    "source": "Repo READMEs and integrations",
+    "reference": "TypeScript and Python SDK source",
+    "guides": "Integration skills",
+    "index": "llms-index.txt and PAGE_MANIFEST.json"
+  },
+  "sections": {
+    "official": { "path": "official/", "mdxCount": 113 },
+    "source": { "path": "source/" },
+    "reference": { "path": "reference/" },
+    "guides": { "path": "guides/" },
+    "index": { "path": "index/", "manifest": "index/PAGE_MANIFEST.json" }
+  }
+}

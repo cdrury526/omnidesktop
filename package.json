@@ -9,7 +9,11 @@
     "dev:all": "concurrently -k -n host,sandbox -c cyan,magenta \"vite\" \"tsx sandbox-server.ts\"",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "docs:ingest": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- ingest docs",
+    "docs:search": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- search",
+    "docs:list": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- list",
+    "docs:open": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin omni-docs -- open"
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.5",

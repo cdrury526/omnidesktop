@@ -41,6 +41,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "open_tabs",
         sql: include_str!("schema/0003_open_tabs.sql"),
     },
+    Migration {
+        version: 4,
+        name: "doc_index",
+        sql: include_str!("schema/0004_doc_index.sql"),
+    },
 ];
 
 /// Apply every pending migration in order. Returns a contextual error naming the

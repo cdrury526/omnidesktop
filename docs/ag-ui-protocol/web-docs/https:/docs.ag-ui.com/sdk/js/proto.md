@@ -1,1 +1,0 @@
-# @ag-ui/proto

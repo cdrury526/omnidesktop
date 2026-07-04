@@ -1,0 +1,22 @@
+layers:
+  official:
+    priority: 1
+    description: Upstream Mintlify/MDX doc source (canonical)
+  published:
+    priority: 2
+    description: Rendered web documentation export
+  source:
+    priority: 3
+    description: Repository READMEs, integrations, changelogs
+  reference:
+    priority: 4
+    description: API implementation source and export maps
+  guides:
+    priority: 5
+    description: Skills and integration guides
+  index:
+    priority: 0
+    description: Discovery indexes (llms.txt, manifests) — light indexing
+
+skip_prefixes:
+  - "_provenance"

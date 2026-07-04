@@ -1,3 +1,0 @@
-# Overview
-
-Client package overview

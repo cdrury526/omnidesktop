@@ -1,5 +1,6 @@
-mod db;
+pub mod db;
 mod debug;
+pub mod docs;
 mod fs;
 
 use tauri::Manager;
@@ -20,7 +21,9 @@ fn keyring_entry() -> Result<keyring::Entry, String> {
 
 #[tauri::command]
 fn save_api_key(key: String) -> Result<(), String> {
-    keyring_entry()?.set_password(&key).map_err(|e| e.to_string())
+    keyring_entry()?
+        .set_password(&key)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

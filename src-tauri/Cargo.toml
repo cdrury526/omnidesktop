@@ -7,6 +7,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "omni-docs"
+path = "src/bin/omni-docs.rs"
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -36,4 +40,7 @@ tokio = { version = "1", features = ["sync"] }
 # Local debug bridge: a tiny HTTP server an agent drives to introspect/iterate.
 tiny_http = "0.12"
 base64 = "0.22"
+walkdir = "2"
+sha2 = "0.10"
+clap = { version = "4", features = ["derive"] }
 

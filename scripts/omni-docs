@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Thin wrapper around the Rust omni-docs binary.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec cargo run --quiet --manifest-path "$ROOT/src-tauri/Cargo.toml" --bin omni-docs -- "$@"
