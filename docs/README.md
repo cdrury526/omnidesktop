@@ -58,6 +58,10 @@ pnpm docs:index --compact --mirror ag-ui-protocol
 pnpm docs:resolve stopWhen
 pnpm docs:resolve --top3 events
 
+# API symbol lookup from reference files
+pnpm docs:symbol callModel
+pnpm docs:symbol createMCPTools
+
 # Full content by hit id
 pnpm docs:open -- 42
 pnpm docs:open --json 42

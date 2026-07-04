@@ -51,6 +51,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "doc_chunks",
         sql: include_str!("schema/0005_doc_chunks.sql"),
     },
+    Migration {
+        version: 6,
+        name: "doc_symbols",
+        sql: include_str!("schema/0006_doc_symbols.sql"),
+    },
 ];
 
 /// Apply every pending migration in order. Returns a contextual error naming the

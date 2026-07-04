@@ -148,6 +148,9 @@ pub async fn ingest_mirror(db: &Db, mirror_root: &Path) -> Result<IngestReport, 
         if should_chunk(&format) {
             insert_chunks(db, page_id, &content, &title).await?;
         }
+        if should_index_symbols(layer, &format) {
+            insert_symbols(db, page_id, &content, &format).await?;
+        }
         report.inserted += 1;
     }
 
@@ -180,6 +183,10 @@ fn extension_format(file_name: &str) -> String {
 
 fn should_chunk(format: &str) -> bool {
     matches!(format, "md" | "mdx")
+}
+
+fn should_index_symbols(layer: &str, format: &str) -> bool {
+    layer == "reference" && matches!(format, "ts" | "py" | "md")
 }
 
 fn hash_content(content: &str) -> String {
@@ -290,6 +297,12 @@ async fn upsert_source(db: &Db, slug: &str, root: &Path, prov: &Provenance) -> R
 async fn wipe_pages_for_source(db: &Db, source_id: i64) -> Result<(), String> {
     let conn = db.conn.clone();
     conn.execute(
+        "DELETE FROM doc_symbols WHERE page_id IN (SELECT id FROM doc_pages WHERE source_id = ?)",
+        libsql::params![source_id],
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    conn.execute(
         "DELETE FROM doc_chunks WHERE page_id IN (SELECT id FROM doc_pages WHERE source_id = ?)",
         libsql::params![source_id],
     )
@@ -379,6 +392,121 @@ async fn insert_chunks(
         .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+async fn insert_symbols(db: &Db, page_id: i64, content: &str, format: &str) -> Result<(), String> {
+    let symbols = extract_symbols(content, format);
+    let conn = db.conn.clone();
+    for symbol in symbols {
+        conn.execute(
+            "INSERT INTO doc_symbols(page_id, name, kind, line, snippet) VALUES(?, ?, ?, ?, ?)",
+            libsql::params![
+                page_id,
+                symbol.name.as_str(),
+                symbol.kind.as_str(),
+                symbol.line as i64,
+                symbol.snippet.as_str(),
+            ],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct SymbolDef {
+    name: String,
+    kind: String,
+    line: usize,
+    snippet: String,
+}
+
+fn extract_symbols(content: &str, format: &str) -> Vec<SymbolDef> {
+    let mut symbols = Vec::new();
+    for (idx, line) in content.lines().enumerate() {
+        let line_no = idx + 1;
+        let trimmed = line.trim();
+        let parsed = match format {
+            "ts" => parse_ts_symbol(trimmed),
+            "py" => parse_prefixed_symbol(trimmed, &[("def ", "function"), ("class ", "class")]),
+            "md" => parse_markdown_export(trimmed),
+            _ => None,
+        };
+        if let Some((name, kind)) = parsed {
+            if is_symbol_name(&name) && !symbols.iter().any(|s: &SymbolDef| s.name == name) {
+                symbols.push(SymbolDef {
+                    name,
+                    kind,
+                    line: line_no,
+                    snippet: trimmed.to_string(),
+                });
+            }
+        }
+    }
+    symbols
+}
+
+fn parse_ts_symbol(line: &str) -> Option<(String, String)> {
+    let line = line.strip_prefix("export ").unwrap_or(line).trim_start();
+    if let Some(symbol) = parse_prefixed_symbol(
+        line,
+        &[
+            ("async function ", "function"),
+            ("function ", "function"),
+            ("class ", "class"),
+            ("interface ", "interface"),
+            ("type ", "type"),
+            ("const ", "const"),
+            ("let ", "let"),
+            ("var ", "var"),
+        ],
+    ) {
+        return Some(symbol);
+    }
+    parse_ts_export_list(line)
+}
+
+fn parse_prefixed_symbol(line: &str, prefixes: &[(&str, &str)]) -> Option<(String, String)> {
+    for (prefix, kind) in prefixes {
+        if let Some(rest) = line.strip_prefix(prefix) {
+            return Some((take_identifier(rest)?, (*kind).to_string()));
+        }
+    }
+    None
+}
+
+fn parse_ts_export_list(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("export {")?;
+    let name = rest
+        .split([',', '}'])
+        .next()
+        .and_then(|part| part.split(" as ").next())
+        .map(str::trim)
+        .filter(|part| !part.is_empty())?;
+    Some((name.to_string(), "export".to_string()))
+}
+
+fn parse_markdown_export(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("- `")?;
+    let name = rest.split('`').next()?.trim();
+    let name = name.rsplit('/').next().unwrap_or(name);
+    Some((name.to_string(), "export".to_string()))
+}
+
+fn take_identifier(value: &str) -> Option<String> {
+    let ident: String = value
+        .chars()
+        .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '$')
+        .collect();
+    (!ident.is_empty()).then_some(ident)
+}
+
+fn is_symbol_name(value: &str) -> bool {
+    value
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_' || ch == '$')
 }
 
 #[derive(Debug, Clone)]

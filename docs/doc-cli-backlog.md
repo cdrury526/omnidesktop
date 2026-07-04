@@ -40,10 +40,10 @@ Mark items `[x]` when **implemented and tested** (note command + date in *Verifi
 
 ## Priority 2 — nice second wave
 
-- [ ] **6. `symbol <name>`**
+- [x] **6. `symbol <name>`**
   - Index exports / function names from `reference/` (`.ts`, `*-exports.md`).
   - Example: `symbol callModel`, `symbol createMCPTools`.
-  - *Verified:*
+  - *Verified:* 2026-07-04: `cargo build --manifest-path src-tauri/Cargo.toml --bin omni-docs`; `pnpm docs:ingest`; `pnpm docs:symbol callModel | node -e ...`; `pnpm docs:symbol createMCPTools | node -e ...`; `pnpm docs:symbol --json callModel | node -e ...`.
 
 - [ ] **7. `find` alias / `--paths-only`**
   - Thin output: `mirror/rel_path` per line for editor open / scripting.

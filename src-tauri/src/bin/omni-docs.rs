@@ -4,8 +4,9 @@
 use clap::{Parser, Subcommand};
 use omni_desktop_lib::db;
 use omni_desktop_lib::docs::{
-    ingest_mirror, ingest_root, list_categories, list_layers, list_mirrors, list_pages, open_chunk,
-    open_page, open_page_json, resolve_topic, search, search_chunks, stats, IngestReport,
+    find_symbols, ingest_mirror, ingest_root, list_categories, list_layers, list_mirrors,
+    list_pages, open_chunk, open_page, open_page_json, resolve_topic, search, search_chunks, stats,
+    IngestReport,
 };
 use std::path::PathBuf;
 
@@ -90,6 +91,17 @@ enum Command {
         /// Print the top three matches instead of only the best one
         #[arg(long)]
         top3: bool,
+        /// Emit JSON array of matches
+        #[arg(long)]
+        json: bool,
+    },
+    /// Find exported/API symbols in reference files
+    Symbol {
+        name: String,
+        #[arg(long)]
+        mirror: Option<String>,
+        #[arg(long, default_value_t = 12)]
+        limit: u32,
         /// Emit JSON array of matches
         #[arg(long)]
         json: bool,
@@ -310,6 +322,35 @@ async fn main() -> Result<(), String> {
                     display_category(&hit.doc.category),
                     hit.doc.mirror,
                     hit.doc.rel_path
+                );
+            }
+        }
+        Command::Symbol {
+            name,
+            mirror,
+            limit,
+            json,
+        } => {
+            let hits = find_symbols(&database, &name, mirror.as_deref(), limit).await?;
+            if json {
+                print_json(&hits)?;
+                return Ok(());
+            }
+            if hits.is_empty() {
+                println!("(no matches)");
+                return Ok(());
+            }
+            for hit in hits {
+                println!(
+                    "[{}] {} ({})  {}:{}\n  {}\n  → {}/{}",
+                    hit.id,
+                    hit.name,
+                    hit.kind,
+                    hit.rel_path,
+                    hit.line,
+                    hit.snippet,
+                    hit.mirror,
+                    hit.rel_path
                 );
             }
         }
