@@ -4,7 +4,7 @@ import { logEvent } from "../lib/events";
 import { getSetting, setSetting, upsertMcpServer, listMcpServers } from "../lib/db";
 
 // Older builds prefilled this external demo endpoint even though Omni does not
-// start it. Keep the value only to migrate an unsaved legacy default safely.
+// start it. Do not restore it automatically; users can still enter it manually.
 const LEGACY_DEMO_MCP_SERVER = "http://localhost:3001/mcp";
 
 export type ConnectTrigger = "auto" | "manual" | "debug-bridge";
@@ -101,15 +101,15 @@ export function useMcpConnection() {
     (async () => {
       const [savedUrl, rows] = await Promise.all([getSetting("server_url"), listMcpServers()]);
       if (cancelled) return;
-      const savedServerWasConnected = rows.some(
-        (row: { url: string }) => row.url === savedUrl,
-      );
-      const shouldClearLegacyDefault =
-        savedUrl === LEGACY_DEMO_MCP_SERVER && !savedServerWasConnected;
+      const shouldClearLegacyDefault = savedUrl === LEGACY_DEMO_MCP_SERVER;
       const restoredUrl = shouldClearLegacyDefault ? "" : savedUrl?.trim();
       if (shouldClearLegacyDefault) void setSetting("server_url", "");
 
-      const urls = new Set(rows.map((r: { url: string }) => r.url));
+      const urls = new Set(
+        rows
+          .map((row: { url: string }) => row.url)
+          .filter((url) => url !== LEGACY_DEMO_MCP_SERVER),
+      );
       if (restoredUrl) urls.add(restoredUrl);
       setServerOptions([...urls].map((value) => ({ value })));
       if (restoredUrl) {
