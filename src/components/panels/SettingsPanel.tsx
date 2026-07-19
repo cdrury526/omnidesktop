@@ -4,7 +4,7 @@
  * server connection. The model picker now lives in the composer; this is for the
  * things you set once.
  */
-import { Alert, AutoComplete, Badge, Button, Form, Input, Space } from "antd";
+import { Alert, AutoComplete, Badge, Button, Flex, Form, Input } from "antd";
 import type { FormItemProps } from "antd";
 import { keyringAvailable } from "../../lib/secrets";
 
@@ -93,16 +93,19 @@ export function SettingsPanel({
             ) : undefined
           }
         >
-          <Space direction="vertical" size="small" style={{ width: "100%" }}>
+          <Flex vertical gap="small" style={{ width: "100%" }}>
+            <Alert
+              type="info"
+              showIcon
+              title="Optional tools"
+              description="Omni does not include an MCP server. Start or choose a compatible server, then enter its URL here. You can chat without one."
+            />
             <AutoComplete
               value={serverUrl}
               onChange={onServerUrlChange}
               options={serverOptions}
               popupMatchSelectWidth={false}
-              filterOption={(input, option) =>
-                (option?.value ?? "").toLowerCase().includes(input.toLowerCase())
-              }
-              placeholder="http://localhost:3001/mcp"
+              placeholder="https://your-mcp-server.example/mcp"
               onKeyDown={(e) => {
                 if (e.key === "Enter") onConnect();
               }}
@@ -112,9 +115,20 @@ export function SettingsPanel({
               {serverName ? "Reconnect" : "Connect"}
             </Button>
             {connectError && (
-              <Alert type="error" message={connectError} showIcon />
+              <Alert
+                type="error"
+                showIcon
+                title="Couldn't connect to the MCP server"
+                description={
+                  <>
+                    Check that the URL is correct and the server is running, then try again.
+                    <br />
+                    Details: {connectError}
+                  </>
+                }
+              />
             )}
-          </Space>
+          </Flex>
         </Form.Item>
       </Form>
     </div>

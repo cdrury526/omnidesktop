@@ -66,9 +66,21 @@ pnpm tauri dev      # starts Vite + the cross-origin sandbox proxy + the window
 ```
 
 Then in the app: pick a model, paste your OpenRouter API key (saved to the keyring),
-connect to an MCP server, and chat. To try an inline MCP App, run an
-[ext-apps](https://github.com/modelcontextprotocol/ext-apps) example server on
-`http://localhost:3001/mcp` and ask the model to use one of its tools.
+and chat. MCP tools are optional: Omni is an MCP host, so it does **not** bundle
+or start an MCP server. To use tools, start or choose a compatible MCP server and
+enter its URL in **Settings → MCP server**.
+
+For an inline-MCP-App development demo, start the in-repo forms server in a
+second terminal:
+
+```bash
+cd servers/forms
+PORT=3002 bun main.ts
+```
+
+Then connect to `http://localhost:3002/mcp` from Settings. The external
+[ext-apps](https://github.com/modelcontextprotocol/ext-apps) basic-server example
+can instead be run separately on `http://localhost:3001/mcp`.
 
 > **NVIDIA + Wayland:** WebKitGTK's DMA-BUF renderer crashes on NVIDIA/Wayland;
 > the app sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` in the Rust entrypoint, so no

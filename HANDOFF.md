@@ -287,10 +287,10 @@ streaming. The only sluggish case is cancelling during **time-to-first-token**
 (the model's pre-generation latency, ~5s with `deepseek-v4-flash`), where there's
 no stream to interrupt yet; that TTFT is provider/model latency, not our code.
 
-Verification gotcha: the model must be **connected to an MCP server** (Connect
-button / bridge `/connect`) for turns to behave normally; HMR also leaves stale
-`uncaught` events in the bridge log mid-edit — confirm against the *served*
-source + `tsc` before trusting them.
+Verification gotcha: an MCP server is optional for ordinary chat, but connect one
+(Settings / bridge `/connect`) before testing MCP tools or inline apps. HMR also
+leaves stale `uncaught` events in the bridge log mid-edit — confirm against the
+*served* source + `tsc` before trusting them.
 
 ## Run / verify
 

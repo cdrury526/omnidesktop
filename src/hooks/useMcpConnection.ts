@@ -3,7 +3,9 @@ import { connectToServer, type ServerInfo } from "../mcp/host-bridge";
 import { logEvent } from "../lib/events";
 import { getSetting, setSetting, upsertMcpServer, listMcpServers } from "../lib/db";
 
-export const DEFAULT_MCP_SERVER = "http://localhost:3001/mcp";
+// Older builds prefilled this external demo endpoint even though Omni does not
+// start it. Keep the value only to migrate an unsaved legacy default safely.
+const LEGACY_DEMO_MCP_SERVER = "http://localhost:3001/mcp";
 
 export type ConnectTrigger = "auto" | "manual" | "debug-bridge";
 
@@ -12,19 +14,17 @@ function eventSource(trigger: ConnectTrigger) {
 }
 
 export function useMcpConnection() {
-  const [serverUrl, setServerUrl] = useState(DEFAULT_MCP_SERVER);
+  const [serverUrl, setServerUrl] = useState("");
   const [server, setServer] = useState<ServerInfo | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
-  const [serverOptions, setServerOptions] = useState<{ value: string }[]>([
-    { value: DEFAULT_MCP_SERVER },
-  ]);
+  const [serverOptions, setServerOptions] = useState<{ value: string }[]>([]);
   const inFlight = useRef(false);
 
   const connectTo = useCallback(async (url: string, trigger: ConnectTrigger): Promise<ServerInfo | null> => {
     const trimmed = url.trim();
     if (!trimmed) {
-      const msg = "Enter an MCP server URL (e.g. http://localhost:3001/mcp).";
+      const msg = "Enter the URL of an MCP server to connect optional tools.";
       setConnectError(msg);
       logEvent({
         source: eventSource(trigger),
@@ -86,6 +86,11 @@ export function useMcpConnection() {
 
   const connect = useCallback(() => connectTo(serverUrl, "manual"), [connectTo, serverUrl]);
 
+  const updateServerUrl = useCallback((url: string) => {
+    setServerUrl(url);
+    setConnectError(null);
+  }, []);
+
   const connectFromBridge = useCallback(
     (url: string) => connectTo(url, "debug-bridge"),
     [connectTo],
@@ -96,11 +101,21 @@ export function useMcpConnection() {
     (async () => {
       const [savedUrl, rows] = await Promise.all([getSetting("server_url"), listMcpServers()]);
       if (cancelled) return;
-      const urls = new Set([DEFAULT_MCP_SERVER, ...rows.map((r: { url: string }) => r.url)]);
-      if (savedUrl) urls.add(savedUrl);
+      const savedServerWasConnected = rows.some(
+        (row: { url: string }) => row.url === savedUrl,
+      );
+      const shouldClearLegacyDefault =
+        savedUrl === LEGACY_DEMO_MCP_SERVER && !savedServerWasConnected;
+      const restoredUrl = shouldClearLegacyDefault ? "" : savedUrl?.trim();
+      if (shouldClearLegacyDefault) void setSetting("server_url", "");
+
+      const urls = new Set(rows.map((r: { url: string }) => r.url));
+      if (restoredUrl) urls.add(restoredUrl);
       setServerOptions([...urls].map((value) => ({ value })));
-      if (savedUrl) setServerUrl(savedUrl);
-      if (savedUrl?.trim()) await connectTo(savedUrl.trim(), "auto");
+      if (restoredUrl) {
+        setServerUrl(restoredUrl);
+        await connectTo(restoredUrl, "auto");
+      }
     })();
     return () => {
       cancelled = true;
@@ -109,7 +124,7 @@ export function useMcpConnection() {
 
   return {
     serverUrl,
-    setServerUrl,
+    setServerUrl: updateServerUrl,
     server,
     connecting,
     connectError,
