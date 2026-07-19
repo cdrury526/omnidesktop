@@ -112,10 +112,9 @@ export function useMcpConnection() {
       );
       if (restoredUrl) urls.add(restoredUrl);
       setServerOptions([...urls].map((value) => ({ value })));
-      if (restoredUrl) {
-        setServerUrl(restoredUrl);
-        await connectTo(restoredUrl, "auto");
-      }
+      // MCP tools are optional. Remember the last URL, but never turn a
+      // stopped external server into an error on app startup.
+      if (restoredUrl) setServerUrl(restoredUrl);
     })();
     return () => {
       cancelled = true;

@@ -332,7 +332,7 @@ export function ChatSession({
               <FolderMissingNotice path={workingDir!} onPickFolder={setWorkingDir} />
             </div>
           ) : (
-            <ChatWelcome onPick={submit} />
+            <ChatWelcome onPick={submit} hasMcpServer={!!server} />
           )}
         </section>
 
@@ -359,9 +359,7 @@ export function ChatSession({
             placeholder={
               composerBlocked
                 ? "Project folder missing — choose a folder above to send messages"
-                : !server
-                  ? "Connect a server in Settings to start"
-                  : busy
+                : busy
                     ? "Agent is working — Enter queues, ✕ cancels"
                     : formPending
                       ? "Form open — your message will queue (Enter)"
